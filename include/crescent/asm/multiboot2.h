@@ -161,4 +161,4 @@ struct multiboot_tag_locations {
     const struct multiboot_tag_string* bootloader_name;
 };
 
-#endif /* __ASSEMBLY_FILE */
+#endif /* __ASSEMBLY_FILE__ */

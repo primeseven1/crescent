@@ -16,6 +16,8 @@
 #define V2P(a) ((void*)((uintptr_t)(a) - KERNEL_VMA_OFFSET))
 #define P2V(a) ((void*)((uintptr_t)(a) + KERNEL_VMA_OFFSET))
 
+typedef u32 pte_t;
+
 enum page_directory_flags {
     PD_PRESENT = (1 << 0),
     PD_READ_WRITE = (1 << 1),
@@ -60,13 +62,13 @@ void unmap_page(const void* vaddr);
  * count - Number of pages
  * Return values: Look at the map_page function for more info, the return values are the exact same
  */
-int map_pages(const void* vaddr, const void* paddr, int flags, unsigned int count);
+int map_pages(const void* vaddr, const void* paddr, int flags, size_t count);
 
 /*
  * vaddr - Virtal address
  * count - Number of pages to unmap
  */
-void unmap_pages(const void* vaddr, unsigned int count);
+void unmap_pages(const void* vaddr, size_t count);
 
 #else
 

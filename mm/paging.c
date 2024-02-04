@@ -7,7 +7,7 @@ static inline void tlb_flush_single(const void* vaddr)
 
 int map_page(const void* vaddr, const void* paddr, int flags)
 {
-    u32** page_directory;
+    pte_t** page_directory;
     asm volatile("movl %%cr3, %0" : "=r"(page_directory));
     page_directory = P2V(page_directory);
     unsigned long pd_index = (unsigned long)vaddr >> 22;
@@ -19,7 +19,7 @@ int map_page(const void* vaddr, const void* paddr, int flags)
     if (!((uintptr_t)page_directory[pd_index] & 0x01))
         return -ERR_PDE_NOT_PRESENT;
 
-    u32* page_table = (u32*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
+    pte_t* page_table = (pte_t*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
     page_table = P2V(page_table);
     unsigned long pt_index = (unsigned long)vaddr >> 12 & 0x03FF;
 
@@ -34,12 +34,12 @@ int map_page(const void* vaddr, const void* paddr, int flags)
 
 void unmap_page(const void* vaddr)
 {
-    u32** page_directory;
+    pte_t** page_directory;
     asm volatile("movl %%cr3, %0" : "=r"(page_directory));
     page_directory = P2V(page_directory);
     unsigned long pd_index = (unsigned long)vaddr >> 22;
 
-    u32* page_table = (u32*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
+    pte_t* page_table = (pte_t*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
     page_table = P2V(page_table);
     unsigned long pt_index = (unsigned long)vaddr >> 12 & 0x03FF;
 
@@ -47,9 +47,9 @@ void unmap_page(const void* vaddr)
     tlb_flush_single(vaddr);
 }
 
-int map_pages(const void* vaddr, const void* paddr, int flags, unsigned int count)
+int map_pages(const void* vaddr, const void* paddr, int flags, size_t count)
 {
-    unsigned int pages_mapped = 0;
+    size_t pages_mapped = 0;
 
     while (count--) {
         int err = map_page(vaddr, paddr, flags);
@@ -71,7 +71,7 @@ int map_pages(const void* vaddr, const void* paddr, int flags, unsigned int coun
     return 0;
 }
 
-void unmap_pages(const void* vaddr, unsigned int count)
+void unmap_pages(const void* vaddr, size_t count)
 {
     while (count--) {
         unmap_page(vaddr);

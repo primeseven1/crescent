@@ -5,28 +5,24 @@
 static const struct multiboot_info* map_multiboot_info(const struct multiboot_info* mbi)
 {
     uintptr_t mbi_aligned = (uintptr_t)mbi / 4096 * 4096;
-    const void* mbi_vaddr = (void*)0xC0100000;
+    const void* mbi_vaddr = (void*)(KERNEL_VMA_OFFSET + 0x100000);
     int err = map_page(mbi_vaddr, (void*)mbi_aligned, PT_PRESENT);
     /* Terrible error handling, but no panic function yet, so doing this for now */
-    if (err) {
-        while (1)
-            asm volatile("hlt");
-    }
+    if (err)
+        asm volatile("ud2");
 
     unsigned long page_offset = (uintptr_t)mbi - mbi_aligned;
     mbi = (struct multiboot_info*)((uintptr_t)mbi - mbi_aligned + (uintptr_t)mbi_vaddr);
 
-    unsigned int num_pages = mbi->total_size / PAGE_SIZE + 1;
+    size_t num_pages = mbi->total_size / PAGE_SIZE + 1;
 
     if (mbi->total_size >= PAGE_SIZE - page_offset)
         num_pages++;
 
     err = map_pages((u8*)mbi_vaddr + PAGE_SIZE, (void*)mbi_aligned, PT_PRESENT, num_pages);
     /* Here we go again with the terrible error handling */
-    if (err) {
-        while (1)
-            asm volatile("hlt");
-    }
+    if (err)
+        asm volatile("ud2");
 
     return mbi;
 }
