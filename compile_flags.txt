@@ -1,0 +1,9 @@
+-fno-stack-protector
+-ffreestanding
+-Wall
+-Wextra
+-Wshadow
+-Wstrict-prototypes
+-Wpointer-arith
+-I./include
+-std=gnu17

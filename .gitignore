@@ -1,0 +1,7 @@
+scripts/iso
+
+*.o
+*.d
+
+scripts/crescent.iso
+/crescent-kernel
