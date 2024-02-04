@@ -57,6 +57,11 @@ struct multiboot_info {
     struct multiboot_tag tags[0];
 } __attribute__((packed));
 
+struct multiboot_tag_string {
+    struct multiboot_tag tag;
+    char str[0];
+} __attribute__((packed));
+
 /* Framebuffer info */
 
 struct multiboot_color {
@@ -83,7 +88,7 @@ struct multiboot_framebuffer_info {
 
 struct multiboot_framebuffer_palette {
     u16 num_colors;
-    struct multiboot_color palette;
+    struct multiboot_color palette[0];
 } __attribute__((packed));
 
 struct multiboot_framebuffer_rgb {
@@ -128,11 +133,32 @@ struct multiboot_tag_mmap {
     struct multiboot_mmap_entry entries[0];
 } __attribute__((packed));
 
-/* Now the structure that we use with every location for the tags */
+/* Boot device */
 
+struct multiboot_tag_bootdev {
+    struct multiboot_tag tag;
+    u32 biosdev;
+    u32 slice;
+    u32 part;
+} __attribute__((packed));
+
+/* ACPI */
+
+struct multiboot_tag_acpi {
+    struct multiboot_tag tag;
+    u8 rsdp[0];
+} __attribute__((packed));
+
+/* So that you don't have to search for the tags every time */
 struct multiboot_tag_locations {
-    const struct multiboot_tag_framebuffer* framebuffer_location;
-    const struct multiboot_tag_mmap* mmap_location;
+    const struct multiboot_tag_framebuffer* framebuffer;
+    const struct multiboot_tag_mmap* mmap;
+    const struct multiboot_tag_bootdev* boot_device;
+    struct {
+        const struct multiboot_tag_acpi* rsdp;
+        bool new;
+    } acpi;
+    const struct multiboot_tag_string* bootloader_name;
 };
 
 #endif /* __ASSEMBLY_FILE */
