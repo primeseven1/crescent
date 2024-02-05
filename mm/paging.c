@@ -1,3 +1,4 @@
+#include "crescent/error.h"
 #include <crescent/asm/paging.h>
 
 static inline void tlb_flush_single(const void* vaddr)
@@ -7,6 +8,9 @@ static inline void tlb_flush_single(const void* vaddr)
 
 int map_page(const void* vaddr, const void* paddr, int flags)
 {
+    if ((uintptr_t)vaddr % 4096 != 0 || (uintptr_t)paddr % 4096 != 0)
+        return -ERR_MISALIGNED_ADDR;
+
     pte_t** page_directory;
     asm volatile("movl %%cr3, %0" : "=r"(page_directory));
     page_directory = P2V(page_directory);
@@ -32,8 +36,11 @@ int map_page(const void* vaddr, const void* paddr, int flags)
     return 0;
 }
 
-void unmap_page(const void* vaddr)
+int unmap_page(const void* vaddr)
 {
+    if ((uintptr_t)vaddr % 4096 != 0)
+        return -ERR_MISALIGNED_ADDR;
+
     pte_t** page_directory;
     asm volatile("movl %%cr3, %0" : "=r"(page_directory));
     page_directory = P2V(page_directory);
@@ -45,6 +52,8 @@ void unmap_page(const void* vaddr)
 
     page_table[pt_index] = 0;
     tlb_flush_single(vaddr);
+
+    return 0;
 }
 
 int map_pages(const void* vaddr, const void* paddr, int flags, size_t count)
@@ -71,10 +80,23 @@ int map_pages(const void* vaddr, const void* paddr, int flags, size_t count)
     return 0;
 }
 
-void unmap_pages(const void* vaddr, size_t count)
+int unmap_pages(const void* vaddr, size_t count)
 {
+    /* 
+     * Only need to check for an error on the first unmapping,
+     * since the only return value for unmap_page is -ERR_MISALIGNED_ADDR
+     */
+    int err = unmap_page(vaddr);
+    if (err)
+        return err;
+
+    vaddr = (u8*)vaddr + PAGE_SIZE;
+    count--;
+
     while (count--) {
         unmap_page(vaddr);
         vaddr = (u8*)vaddr + PAGE_SIZE;
     }
+
+    return 0;
 }

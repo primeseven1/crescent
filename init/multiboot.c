@@ -4,25 +4,25 @@
 
 static const struct multiboot_info* map_multiboot_info(const struct multiboot_info* mbi)
 {
-    uintptr_t mbi_aligned = (uintptr_t)mbi / 4096 * 4096;
-    const void* mbi_vaddr = (void*)(KERNEL_VMA_OFFSET + 0x100000);
-    int err = map_page(mbi_vaddr, (void*)mbi_aligned, PT_PRESENT);
-    /* Terrible error handling, but no panic function yet, so doing this for now */
+    /* First get the offset in the page */
+    uintptr_t mbi_paddr_aligned = (uintptr_t)ALIGN_TO_PAGE(mbi);
+    uintptr_t mbi_page_offset = (uintptr_t)mbi - mbi_paddr_aligned;
+
+    /* Now map 1 page, and then determine if we need to map more pages */
+    mbi = (struct multiboot_info*)(0xC0100000 + mbi_page_offset);
+
+    /* This is really bad error handling, it will be changed when there is a better way to do it */
+    int err = map_page(ALIGN_TO_PAGE(mbi), (void*)mbi_paddr_aligned, PT_PRESENT);
     if (err)
         asm volatile("ud2");
 
-    unsigned long page_offset = (uintptr_t)mbi - mbi_aligned;
-    mbi = (struct multiboot_info*)((uintptr_t)mbi - mbi_aligned + (uintptr_t)mbi_vaddr);
-
-    size_t num_pages = mbi->total_size / PAGE_SIZE + 1;
-
-    if (mbi->total_size >= PAGE_SIZE - page_offset)
-        num_pages++;
-
-    err = map_pages((u8*)mbi_vaddr + PAGE_SIZE, (void*)mbi_aligned, PT_PRESENT, num_pages);
-    /* Here we go again with the terrible error handling */
-    if (err)
-        asm volatile("ud2");
+    size_t num_pages = (mbi->total_size + mbi_page_offset) / 4096;
+    if (num_pages) {
+        err = map_pages((void*)((uintptr_t)ALIGN_TO_PAGE(mbi) + 4096), 
+            (void*)mbi_paddr_aligned, PT_PRESENT, num_pages);
+        if (err)
+            asm volatile("ud2");
+    }
 
     return mbi;
 }
@@ -53,6 +53,8 @@ struct multiboot_tag_locations get_multiboot_tag_locations(const struct multiboo
             break;
         case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME:
             locations.bootloader_name = (struct multiboot_tag_string*)tag;
+            break;
+        default:
             break;
         }
 

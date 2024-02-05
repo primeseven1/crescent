@@ -16,6 +16,8 @@
 #define V2P(a) ((void*)((uintptr_t)(a) - KERNEL_VMA_OFFSET))
 #define P2V(a) ((void*)((uintptr_t)(a) + KERNEL_VMA_OFFSET))
 
+#define ALIGN_TO_PAGE(a) ((void*)((uintptr_t)(a) / PAGE_SIZE * PAGE_SIZE))
+
 typedef u32 pte_t;
 
 enum page_directory_flags {
@@ -48,11 +50,16 @@ enum page_table_flags {
  * -ERR_PDE_NOT_PRESENT: Since there is no heap allocator, or any dynamic allocation (yet)
  *  so this can only map memory when the page directory entry already exists
  * -ERR_PTE_PRESENT: Returned when the PTE entry for the address you're trying to map is present
+ * -ERR_MISALIGNED_ADDR: Returned when either vaddr or paddr are not aligned by a page boundary (4K)
  */
 int map_page(const void* vaddr, const void* paddr, int flags);
 
-/* vaddr - Virtual address */
-void unmap_page(const void* vaddr);
+/*
+ * vaddr - Virtual address
+ * Return values:
+ * -ERR_MISALIGNED_ADDR: Returned when vaddr is not aligned by a page boundary (4K)
+ */
+int unmap_page(const void* vaddr);
 
 /*
  * Notes: On error, this will unmap every page that it successfully mapped before the error happened
@@ -60,15 +67,16 @@ void unmap_page(const void* vaddr);
  * paddr - Physical address to map vaddr to
  * flags - flags for the page table entry, look at page_directory_flags for more info
  * count - Number of pages
- * Return values: Look at the map_page function for more info, the return values are the exact same
+ * Return values: Same as the map_page function
  */
 int map_pages(const void* vaddr, const void* paddr, int flags, size_t count);
 
 /*
  * vaddr - Virtal address
  * count - Number of pages to unmap
+ * Return values: Same as the unmap_page function
  */
-void unmap_pages(const void* vaddr, size_t count);
+int unmap_pages(const void* vaddr, size_t count);
 
 #else
 
