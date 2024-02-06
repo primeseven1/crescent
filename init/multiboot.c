@@ -9,6 +9,7 @@ static const struct multiboot_info* map_multiboot_info(const struct multiboot_in
     uintptr_t mbi_page_offset = (uintptr_t)mbi - mbi_paddr_aligned;
 
     /* Now map 1 page, and then determine if we need to map more pages */
+    const struct multiboot_info* mbi_paddr = mbi;
     mbi = (struct multiboot_info*)(0xC0100000 + mbi_page_offset);
 
     /* This is really bad error handling, it will be changed when there is a better way to do it */
@@ -18,8 +19,8 @@ static const struct multiboot_info* map_multiboot_info(const struct multiboot_in
 
     size_t num_pages = (mbi->total_size + mbi_page_offset) / 4096;
     if (num_pages) {
-        err = map_pages((void*)((uintptr_t)ALIGN_TO_PAGE(mbi) + 4096), 
-            (void*)mbi_paddr_aligned, PT_PRESENT, num_pages);
+        err = map_pages((void*)((uintptr_t)ALIGN_TO_PAGE(mbi) + 4096),
+            (void*)((uintptr_t)ALIGN_TO_PAGE(mbi_paddr) + 4096), PT_PRESENT, num_pages);
         if (err)
             asm volatile("ud2");
     }
