@@ -6,14 +6,38 @@ static inline void tlb_flush_single(const void* vaddr)
     asm volatile("invlpg (%0)" : : "r"(vaddr) : "memory");
 }
 
-int map_page(const void* vaddr, const void* paddr, int flags)
+static inline pte_t** get_page_directory(void)
 {
-    if ((uintptr_t)vaddr % 4096 != 0 || (uintptr_t)paddr % 4096 != 0)
-        return -ERR_MISALIGNED_ADDR;
-
     pte_t** page_directory;
     asm volatile("movl %%cr3, %0" : "=r"(page_directory));
     page_directory = P2V(page_directory);
+    return page_directory;
+}
+
+void* get_paddr(const void* vaddr)
+{
+    pte_t** page_directory = get_page_directory();
+    unsigned long pd_index = (unsigned long)vaddr >> 22;
+
+    if (!((uintptr_t)page_directory[pd_index] & 0x01))
+        return NULL;
+
+    pte_t* page_table = (pte_t*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
+    page_table = P2V(page_table);
+    unsigned long pt_index = (unsigned long)vaddr >> 12 & 0x03FF;
+
+    if (!(page_table[pt_index] & 0x01))
+        return NULL;
+
+    return (void*)((page_table[pt_index] & ~0xFFF) + ((unsigned long)vaddr & 0xFFF));
+}
+
+int map_page(const void* vaddr, const void* paddr, int flags)
+{
+    if ((uintptr_t)vaddr & 4095 || (uintptr_t)paddr & 4095)
+        return -ERR_MISALIGNED_ADDR;
+
+    pte_t** page_directory = get_page_directory();
     unsigned long pd_index = (unsigned long)vaddr >> 22;
 
     /*
@@ -27,7 +51,7 @@ int map_page(const void* vaddr, const void* paddr, int flags)
     page_table = P2V(page_table);
     unsigned long pt_index = (unsigned long)vaddr >> 12 & 0x03FF;
 
-    if ((page_table[pt_index] & 0x01))
+    if (page_table[pt_index] & 0x01)
         return -ERR_PTE_PRESENT;
 
     page_table[pt_index] = ((uintptr_t)paddr | (flags & 0xFFF));
@@ -38,12 +62,10 @@ int map_page(const void* vaddr, const void* paddr, int flags)
 
 int unmap_page(const void* vaddr)
 {
-    if ((uintptr_t)vaddr % 4096 != 0)
+    if ((uintptr_t)vaddr & 4095)
         return -ERR_MISALIGNED_ADDR;
 
-    pte_t** page_directory;
-    asm volatile("movl %%cr3, %0" : "=r"(page_directory));
-    page_directory = P2V(page_directory);
+    pte_t** page_directory = get_page_directory();
     unsigned long pd_index = (unsigned long)vaddr >> 22;
 
     pte_t* page_table = (pte_t*)((uintptr_t)page_directory[pd_index] & ~0xFFF);

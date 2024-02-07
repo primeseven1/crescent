@@ -42,6 +42,14 @@ enum page_table_flags {
     PT_GLOBAL = (1 << 8)
 };
 
+
+/*
+ * vaddr - Virtual address
+ * Return values:
+ * NULL: Returned when the PDE or PTE is not present
+ */
+void* get_paddr(const void* vaddr);
+
 /*
  * vaddr - Virtual address
  * paddr - Physical address to map vaddr to
