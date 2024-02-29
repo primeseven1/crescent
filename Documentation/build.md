@@ -1,6 +1,6 @@
 Building Crescent
 =================
-- Dependencies: i686-elf-gcc toolchain (there is a script for it in the scripts folder), grub-mkrescue (only needed for ISO's)
+- Dependencies: x86_64-elf-gcc toolchain (there is a script for it in the scripts folder), grub-mkrescue (only needed for ISO's)
 
 - First, ./run toolchain.sh in the scripts folder, this will build the gcc toolchain and place it in ~/.toolchains/gcc, this also adds it to your system PATH in your .bashrc
 - A backup of your bashrc is stored in ~/.bashrc.backup
