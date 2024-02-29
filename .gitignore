@@ -4,4 +4,4 @@ scripts/iso
 *.d
 
 scripts/crescent.iso
-/crescent-kernel
+crescent-kernel

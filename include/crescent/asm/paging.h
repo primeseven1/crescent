@@ -1,94 +1,130 @@
 #pragma once
 
 #define PAGE_SIZE 4096
-#define PAGE_TABLE_SIZE 4096
-#define PAGE_DIRECTORY_SIZE 4096
-#define PAGE_TABLE_ALIGN 4096
-#define PAGE_DIRECTORY_ALIGN 4096
 
-#define KERNEL_VMA_OFFSET 0xC0000000
+#define KERNEL_VMA_OFFSET 0xFFFFFF8000000000
 
-#ifndef __ASSEMBLY_FILE__
+#ifdef __ASSEMBLY_FILE__
 
+#define V2P(a) ((a) - KERNEL_VMA_OFFSET)
+#define P2V(a) ((a) + KERNEL_VMA_OFFSET)
+
+#else
+
+#include <crescent/kernel.h>
 #include <crescent/types.h>
-#include <crescent/error.h>
 
-#define V2P(a) ((void*)((uintptr_t)(a) - KERNEL_VMA_OFFSET))
-#define P2V(a) ((void*)((uintptr_t)(a) + KERNEL_VMA_OFFSET))
+#define V2P(a) (void*)((uintptr_t)(a) - KERNEL_VMA_OFFSET)
+#define P2V(a) (void*)((uintptr_t)(a) + KERNEL_VMA_OFFSET)
+#define PAGE_ALIGN(a) ((void*)((uintptr_t)(a) / PAGE_SIZE * PAGE_SIZE))
 
-#define ALIGN_TO_PAGE(a) ((void*)((uintptr_t)(a) / PAGE_SIZE * PAGE_SIZE))
+typedef u64 pml4e_t;
+typedef u64 pdpte_t;
+typedef u64 pde_t;
+typedef u64 pte_t;
 
-typedef u32 pte_t;
-
-enum page_directory_flags {
-    PD_PRESENT = (1 << 0),
-    PD_READ_WRITE = (1 << 1),
-    PD_USER_SUPERVISOR = (1 << 2),
-    PD_WRITETHROUGH = (1 << 3),
-    PD_CACHE_DISABLE = (1 << 4),
-    PD_ACCESSED = (1 << 5),
-    PD_HUGE_PAGE = (1 << 7)
-};
-
-enum page_table_flags {
+enum pt_flags {
     PT_PRESENT = (1 << 0),
     PT_READ_WRITE = (1 << 1),
     PT_USER_SUPERVISOR = (1 << 2),
     PT_WRITETHROUGH = (1 << 3),
     PT_CACHE_DISABLE = (1 << 4),
     PT_ACCESSED = (1 << 5),
-    PT_DIRTY = (1 << 6),
-    PT_ATTRIBUTE_TABLE = (1 << 7),
-    PT_GLOBAL = (1 << 8)
+    PT_UNUSED6 = (1 << 6),
+    PT_HUGE_PAGE = (1 << 7),
+    PT_UNUSED8 = (1 << 8),
+    PT_UNUSED9 = (1 << 9),
+    PT_UNUSED10 = (1 << 10),
+    PT_UNUSED11 = (1 << 11),
+    PT_EXECUTE_DISABLE = ((u64)1 << 63)
 };
 
+static inline void tlb_flush_single(void* addr)
+{
+    asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
+}
+
+static inline void tlb_flush_all(void)
+{
+    asm volatile("movq %%cr3, %%rax\n"
+                 "movq %%rax, %%cr3"
+                 :
+                 :
+                 : "rax", "memory");
+}
 
 /*
- * vaddr - Virtual address
+ * Map a page table
+ * Notes: 
+ * This function will automatically align vaddr, and it will NOT automatically align pt_paddr
+ *
  * Return values:
- * NULL: Returned when the PDE or PTE is not present
+ * -E2BIG: pt_paddr is too big
+ * -EINVAL: Invalid flags, or vaddr is non-canonical
+ * -EADDRNOTAVAIL: pml4/pdpt entries are not present
+ * -EBUSY: Page directory entry already present
+ * 0: Success
  */
-void* get_paddr(const void* vaddr);
+int map_page_table(void* vaddr, const pte_t* pt_paddr, u64 flags);
 
 /*
- * vaddr - Virtual address
- * paddr - Physical address to map vaddr to
- * flags - flags for the page table entry, look at the page_directory_flags enum for more values
+ * Unmap a page table
+ * Notes:
+ * vaddr is automatically aligned
+ *
  * Return values:
- * -ERR_PDE_NOT_PRESENT: Since there is no heap allocator, or any dynamic allocation (yet)
- *  so this can only map memory when the page directory entry already exists
- * -ERR_PTE_PRESENT: Returned when the PTE entry for the address you're trying to map is present
- * -ERR_MISALIGNED_ADDR: Returned when either vaddr or paddr are not aligned by a page boundary (4K)
+ * -EINVAL: vaddr is non-canonical
+ * -EADDRNOTAVAIL: pml4/pdpt entries are not present
+ * 0: Success
  */
-int map_page(const void* vaddr, const void* paddr, int flags);
+int unmap_page_table(void* vaddr);
 
 /*
- * vaddr - Virtual address
+ * Map a page into memory
+ * Notes:
+ * This function automatically aligns vaddr and paddr, be aware of that to see if you need to map more pages
+ *
  * Return values:
- * -ERR_MISALIGNED_ADDR: Returned when vaddr is not aligned by a page boundary (4K)
+ * -E2BIG: paddr is bigger than the amount the CPU supports
+ * -EINVAL: Invalid flags, or vaddr is non-canonical
+ * -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
+ * -EBUSY: Page table entry already present
+ * 0: Success
  */
-int unmap_page(const void* vaddr);
+int map_page(void* vaddr, const void* paddr, u64 flags);
 
 /*
- * Notes: On error, this will unmap every page that it successfully mapped before the error happened
- * vaddr - Virtual address
- * paddr - Physical address to map vaddr to
- * flags - flags for the page table entry, look at page_directory_flags for more info
- * count - Number of pages
- * Return values: Same as the map_page function
+ * Unmap a page
+ * Notes:
+ * This function automatically aligns vaddr, be aware of that to see if you need to unmap more pages
+ *
+ * Return values:
+ * -EINVAL: vaddr is non-canonical
+ * -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
+ * 0: Success
  */
-int map_pages(const void* vaddr, const void* paddr, int flags, size_t count);
+int unmap_page(void* vaddr);
 
 /*
- * vaddr - Virtal address
- * count - Number of pages to unmap
- * Return values: Same as the unmap_page function
+ * Map several pages
+ * Notes:
+ * This automatically aligns vaddr and paddr, make sure you don't need to map more pages
+ * This will also unmap every page it successfully mapped if it fails
+ *
+ * Return values:
+ * The exact same as map_page
  */
-int unmap_pages(const void* vaddr, size_t count);
+int map_pages(void* vaddr, const void* paddr, u64 flags, size_t count);
 
-#else
-
-#define V2P(a) (a - KERNEL_VMA_OFFSET)
-#define P2V(a) (a + KERNEL_VMA_OFFSET)
+/*
+ * Unmap several pages
+ * Notes:
+ * This automatically aligns vaddr and paddr, make sure you don't need to unmap more pages
+ * This does NOT remap the pages that it previously unmapped on error if it doesn't fail on the first unmapping
+ *
+ * Return values:
+ * The exact same as unmap_page
+ */
+int unmap_pages(void* vaddr, size_t count);
 
 #endif /* __ASSEMBLY_FILE__ */

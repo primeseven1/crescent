@@ -6,7 +6,7 @@ import subprocess
 
 
 def run_qemu(qemu_args: str):
-    result = subprocess.run(f"qemu-system-i386 {qemu_args}", shell=True, 
+    result = subprocess.run(f"qemu-system-x86_64 {qemu_args}", shell=True, 
                             stderr=subprocess.PIPE, text=True)
     
     if result.returncode != 0:
@@ -42,10 +42,12 @@ def main():
         print(f"Error: {crescent_iso} does not exist")
         sys.exit(1)
 
-    qemu_args: str = f"-m 256M -cdrom {crescent_iso} -net none"
+    qemu_args: str = f"-m 512M -cdrom {crescent_iso} -net none"
 
     if "-d" in argv or "--debug" in argv:
         qemu_args += " -s -S"
+    if "-e" in argv or "--efi" in argv:
+        qemu_args += " -bios /usr/share/edk2/x64/OVMF.fd"
 
     run_qemu(qemu_args)
 

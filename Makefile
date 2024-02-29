@@ -1,15 +1,15 @@
 CONFIG_DEBUG ?= yes
 
-CC := i686-elf-gcc
-LD := i686-elf-ld
+CC := x86_64-elf-gcc
+LD := x86_64-elf-ld
 
-ASMFLAGS = -c -MMD -MP \
-		   -D__ASSEMBLY_FILE__ \
-		   -I./include
-CFLAGS = -c -MMD -MP \
+ASMFLAGS = -c -MMD -MP -D__ASSEMBLY_FILE__ -I./include
+CFLAGS = -c -MMD -MP -std=gnu17 \
 		 -ffreestanding -fno-stack-protector \
-		 -Wall -Wextra -Wshadow -Wstrict-prototypes -Wpointer-arith \
-		 -I./include -std=gnu17
+		 -Wall -Wextra -Wshadow -Wstrict-prototypes \
+		 -Wpointer-arith -Wvla \
+		 -mno-red-zone -mcmodel=large \
+		 -I./include
 LDFLAGS = -static -nostdlib
 
 ifeq ($(CONFIG_DEBUG), yes)
@@ -17,8 +17,8 @@ ifeq ($(CONFIG_DEBUG), yes)
 	CFLAGS += -g -O0 -DCONFIG_DEBUG
 	LDFLAGS += -O0
 else
-	CFLAGS += -O2
-	LDFLAGS += -O2
+	CFLAGS += -O3
+	LDFLAGS += -O3
 endif
 
 S_SOURCE_FILES := $(shell find ./ -type f -name '*.S')
@@ -28,15 +28,17 @@ C_OBJECT_FILES := $(patsubst %.c, %.o, $(C_SOURCE_FILES))
 H_DEPENDENCIES := $(patsubst %.o, %.d, $(S_OBJECT_FILES) $(C_OBJECT_FILES))
 
 LDSCRIPT := ./kernel/linker.ld
+
 LIBGCC := $(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
 LIBGCC_DIR := $(shell dirname $(LIBGCC))
-OUTPUT := ./crescent-kernel
 
--include $(H_DEPENDENCIES)
+OUTPUT := ./crescent-kernel
 
 .PHONY: all iso clean
 
 all: $(OUTPUT)
+
+-include $(H_DEPENDENCIES)
 
 iso: $(OUTPUT)
 	cp ./crescent-kernel ./scripts/iso/boot
@@ -53,3 +55,4 @@ $(OUTPUT): $(S_OBJECT_FILES) $(C_OBJECT_FILES) $(LDSCRIPT) $(LIBGCC)
 
 clean:
 	rm -f $(S_OBJECT_FILES) $(C_OBJECT_FILES) $(H_DEPENDENCIES) $(OUTPUT)
+

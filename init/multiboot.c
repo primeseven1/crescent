@@ -1,38 +1,36 @@
-#include <crescent/asm/paging.h>
+#include "crescent/kernel.h"
 #include <crescent/asm/multiboot2.h>
-#include "init.h"
+#include <crescent/asm/paging.h>
 
-static const struct multiboot_info* map_multiboot_info(const struct multiboot_info* mbi)
+static struct multiboot_tag_locations locations;
+
+static const struct multiboot_info* map_mbi(const struct multiboot_info* mbi_paddr)
 {
-    /* First get the offset in the page */
-    uintptr_t mbi_paddr_aligned = (uintptr_t)ALIGN_TO_PAGE(mbi);
-    uintptr_t mbi_page_offset = (uintptr_t)mbi - mbi_paddr_aligned;
+    __attribute__((aligned(4096)))
+    static pte_t multiboot_page_table[512];
 
-    /* Now map 1 page, and then determine if we need to map more pages */
-    const struct multiboot_info* mbi_paddr = mbi;
-    mbi = (struct multiboot_info*)(0xC0100000 + mbi_page_offset);
-
-    /* This is really bad error handling, it will be changed when there is a better way to do it */
-    int err = map_page(ALIGN_TO_PAGE(mbi), (void*)mbi_paddr_aligned, PT_PRESENT);
+    int offset = (uintptr_t)mbi_paddr - (uintptr_t)PAGE_ALIGN(mbi_paddr);
+    struct multiboot_info* mbi_vaddr = (struct multiboot_info*)(KERNEL_VMA_OFFSET + offset);
+    
+    int err = map_page_table(mbi_vaddr, V2P(multiboot_page_table), PT_PRESENT);
     if (err)
         asm volatile("ud2");
 
-    size_t num_pages = (mbi->total_size + mbi_page_offset) / 4096;
-    if (num_pages) {
-        err = map_pages((void*)((uintptr_t)ALIGN_TO_PAGE(mbi) + 4096),
-            (void*)((uintptr_t)ALIGN_TO_PAGE(mbi_paddr) + 4096), PT_PRESENT, num_pages);
-        if (err)
-            asm volatile("ud2");
-    }
+    err = map_page(mbi_vaddr, mbi_paddr, PT_PRESENT);
+    if (err)
+        asm volatile("ud2");
 
-    return mbi;
+    size_t num_pages = (mbi_vaddr->total_size + offset) / 4096;
+    err = map_pages((u8*)mbi_vaddr + PAGE_SIZE, (u8*)mbi_paddr + PAGE_SIZE, PT_PRESENT, num_pages);
+    if (err)
+        asm volatile("ud2");
+
+    return mbi_vaddr;
 }
 
-struct multiboot_tag_locations get_multiboot_tag_locations(const struct multiboot_info* mbi)
+struct multiboot_tag_locations* get_mbi_tag_locations(const struct multiboot_info* mbi_paddr)
 {
-    mbi = map_multiboot_info(mbi);
-
-    struct multiboot_tag_locations locations;
+    const struct multiboot_info* mbi = map_mbi(mbi_paddr);
 
     const struct multiboot_tag* tag = mbi->tags;
     while (tag->type != MULTIBOOT_TAG_TYPE_END) {
@@ -62,5 +60,6 @@ struct multiboot_tag_locations get_multiboot_tag_locations(const struct multiboo
         tag = (struct multiboot_tag*)((u8*)tag + ((tag->size + 7) & ~7));
     }
 
-    return locations;
+
+    return &locations;
 }

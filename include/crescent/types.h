@@ -1,8 +1,8 @@
 #pragma once
 
 #include <stdint.h>
-#include <stdarg.h>
-#include <limits.h>
+#include <stdarg.h> /* IWYU pragma: keep */
+#include <limits.h> /* IWYU pragma: keep */
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 #define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
@@ -17,8 +17,8 @@ typedef uint32_t u32;
 typedef int64_t i64;
 typedef uint64_t u64;
 
-typedef i32 ssize_t;
-typedef u32 size_t;
+typedef i64 ssize_t;
+typedef u64 size_t;
 
 typedef enum {
     false = 0,

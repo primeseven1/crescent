@@ -1,7 +1,6 @@
 #include <crescent/asm/multiboot2.h>
 
-/* Even though the section attributes are writable, it will be mapped to read only memory */
-.section .multiboot2.rodata, "aw"
+.section .multiboot2.data, "aw"
 .align 8
 header_start:
     .long MULTIBOOT2_HEADER_MAGIC

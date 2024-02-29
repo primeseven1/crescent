@@ -1,84 +1,158 @@
-#include "crescent/error.h"
 #include <crescent/asm/paging.h>
+#include <crescent/cpu/cpuid.h>
 
-static inline void tlb_flush_single(const void* vaddr)
+static inline void* get_cr3(void)
 {
-    asm volatile("invlpg (%0)" : : "r"(vaddr) : "memory");
+    void* ret;
+    asm volatile("movq %%cr3, %0" : "=r"(ret));
+    return P2V(ret);
 }
 
-static inline pte_t** get_page_directory(void)
+static inline bool is_vaddr_good(const void* vaddr)
 {
-    pte_t** page_directory;
-    asm volatile("movl %%cr3, %0" : "=r"(page_directory));
-    page_directory = P2V(page_directory);
-    return page_directory;
+    return ((uintptr_t)vaddr >> 48 == 0 || (uintptr_t)vaddr >> 48 == 0xFFFF);
 }
 
-void* get_paddr(const void* vaddr)
+static inline bool is_paddr_good(const void* paddr)
 {
-    pte_t** page_directory = get_page_directory();
-    unsigned long pd_index = (unsigned long)vaddr >> 22;
-
-    if (!((uintptr_t)page_directory[pd_index] & 0x01))
-        return NULL;
-
-    pte_t* page_table = (pte_t*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
-    page_table = P2V(page_table);
-    unsigned long pt_index = (unsigned long)vaddr >> 12 & 0x03FF;
-
-    if (!(page_table[pt_index] & 0x01))
-        return NULL;
-
-    return (void*)((page_table[pt_index] & ~0xFFF) + ((unsigned long)vaddr & 0xFFF));
+    static int num_paddr_bits = 0;
+    if (unlikely(!num_paddr_bits)) {
+        u32 eax, ebx, ecx, edx;
+        cpuid_all(0x80000008, 0, &eax, &ebx, &ecx, &edx);
+        num_paddr_bits = eax & 0xFF;
+    }
+    return (uintptr_t)paddr >> num_paddr_bits == 0;
 }
 
-int map_page(const void* vaddr, const void* paddr, int flags)
+static inline bool is_flags_good(u64 flags)
 {
-    if ((uintptr_t)vaddr & 4095 || (uintptr_t)paddr & 4095)
-        return -ERR_MISALIGNED_ADDR;
+    /* Unset the page flags, if any bits are still set, the flags are invalid */
+    flags &= ~(0xFFF | PT_EXECUTE_DISABLE);
+    return !flags;
+}
 
-    pte_t** page_directory = get_page_directory();
-    unsigned long pd_index = (unsigned long)vaddr >> 22;
+int map_page_table(void* vaddr, const pte_t* pt_paddr, u64 flags)
+{
+    if (!is_paddr_good(pt_paddr))
+        return -E2BIG;
+    if (!is_flags_good(flags) || !is_vaddr_good(vaddr) || (uintptr_t)pt_paddr & 4095)
+        return -EINVAL;
 
-    /*
-     * We would normally want to allocate a new page table,
-     * but we don't have an allocator for that yet, so just do this there is one
-     */
-    if (!((uintptr_t)page_directory[pd_index] & 0x01))
-        return -ERR_PDE_NOT_PRESENT;
+    vaddr = PAGE_ALIGN(vaddr);
 
-    pte_t* page_table = (pte_t*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
-    page_table = P2V(page_table);
-    unsigned long pt_index = (unsigned long)vaddr >> 12 & 0x03FF;
+    int pml4_i = (uintptr_t)vaddr >> 39 & 0x01FF;
+    int pdpt_i = (uintptr_t)vaddr >> 30 & 0x01FF;
+    int pd_i = (uintptr_t)vaddr >> 21 & 0x01FF;
 
-    if (page_table[pt_index] & 0x01)
-        return -ERR_PTE_PRESENT;
+    pde_t*** pml4 = get_cr3();
+    if (!((pml4e_t)pml4[pml4_i] & 0x01))
+        return -EADDRNOTAVAIL;
+    pde_t** pdpt = P2V(((pdpte_t)pml4[pml4_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (!((pdpte_t)pdpt[pdpt_i] & 0x01))
+        return -EADDRNOTAVAIL;
 
-    page_table[pt_index] = ((uintptr_t)paddr | (flags & 0xFFF));
+    /* Remapping a whole page table while one is still present can be very bad */
+    pde_t* pd = P2V(((pde_t)pdpt[pdpt_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (((pde_t)pd[pd_i] & 0x01))
+        return -EBUSY;
+
+    pd[pd_i] = (uintptr_t)pt_paddr | flags;
+    tlb_flush_all();
+
+    return 0;
+}
+
+int unmap_page_table(void* vaddr)
+{
+    if (!is_vaddr_good(vaddr))
+        return -EINVAL;
+
+    vaddr = PAGE_ALIGN(vaddr);
+
+    int pml4_i = (uintptr_t)vaddr >> 39 & 0x01FF;
+    int pdpt_i = (uintptr_t)vaddr >> 30 & 0x01FF;
+    int pd_i = (uintptr_t)vaddr >> 21 & 0x01FF;
+
+    pde_t*** pml4 = get_cr3();
+    if (!((pml4e_t)pml4[pml4_i] & 0x01))
+        return -EADDRNOTAVAIL;
+    pde_t** pdpt = P2V(((pdpte_t)pml4[pml4_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (!((pdpte_t)pdpt[pdpt_i] & 0x01))
+        return -EADDRNOTAVAIL;
+
+    pde_t* pd = P2V(((pde_t)pdpt[pdpt_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    pd[pd_i] = 0;
+    tlb_flush_all();
+
+    return 0;
+}
+
+int map_page(void* vaddr, const void* paddr, u64 flags)
+{
+    if (!is_paddr_good(paddr))
+        return -E2BIG;
+    if (!is_vaddr_good(vaddr) || !is_flags_good(flags))
+        return -EINVAL;
+
+    vaddr = PAGE_ALIGN(vaddr);
+    paddr = PAGE_ALIGN(paddr);
+
+    int pml4_i = (uintptr_t)vaddr >> 39 & 0x01FF;
+    int pdpt_i = (uintptr_t)vaddr >> 30 & 0x01FF;
+    int pd_i = (uintptr_t)vaddr >> 21 & 0x01FF;
+    int pt_i = (uintptr_t)vaddr >> 12 & 0x01FF;
+
+    pte_t**** pml4 = get_cr3();
+    if (!((pml4e_t)pml4[pml4_i] & 0x01))
+        return -EADDRNOTAVAIL;
+    pte_t*** pdpt = P2V(((pdpte_t)pml4[pml4_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (!((pdpte_t)pdpt[pdpt_i] & 0x01))
+        return -EADDRNOTAVAIL;
+    pte_t** pd = P2V(((pde_t)pdpt[pdpt_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (!((pde_t)pd[pd_i] & 0x01))
+        return -EADDRNOTAVAIL;
+
+    /* Can be unexpected for some code if this is just remapped for some reason */
+    pte_t* pt = P2V(((pte_t)pd[pd_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (pt[pt_i] & 0x01)
+        return -EBUSY;
+
+    pt[pt_i] = (uintptr_t)paddr | flags;
     tlb_flush_single(vaddr);
 
     return 0;
 }
 
-int unmap_page(const void* vaddr)
+int unmap_page(void* vaddr)
 {
-    if ((uintptr_t)vaddr & 4095)
-        return -ERR_MISALIGNED_ADDR;
+    if (!is_vaddr_good(vaddr))
+        return -EINVAL;
 
-    pte_t** page_directory = get_page_directory();
-    unsigned long pd_index = (unsigned long)vaddr >> 22;
+    vaddr = PAGE_ALIGN(vaddr);
 
-    pte_t* page_table = (pte_t*)((uintptr_t)page_directory[pd_index] & ~0xFFF);
-    page_table = P2V(page_table);
-    unsigned long pt_index = (unsigned long)vaddr >> 12 & 0x03FF;
+    int pml4_i = (uintptr_t)vaddr >> 39 & 0x01FF;
+    int pdpt_i = (uintptr_t)vaddr >> 30 & 0x01FF;
+    int pd_i = (uintptr_t)vaddr >> 21 & 0x01FF;
+    int pt_i = (uintptr_t)vaddr >> 12 & 0x01FF;
 
-    page_table[pt_index] = 0;
+    pte_t**** pml4 = get_cr3();
+    if (!((pml4e_t)pml4[pml4_i] & 0x01))
+        return -EADDRNOTAVAIL;
+    pte_t*** pdpt = P2V(((pdpte_t)pml4[pml4_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (!((pdpte_t)pdpt[pdpt_i] & 0x01))
+        return -EADDRNOTAVAIL;
+    pte_t** pd = P2V(((pde_t)pdpt[pdpt_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    if (!((pde_t)pd[pd_i] & 0x01))
+        return -EADDRNOTAVAIL;
+
+    pte_t* pt = P2V(((pte_t)pd[pd_i] & ~(0xFFF | PT_EXECUTE_DISABLE)));
+    pt[pt_i] = 0;
     tlb_flush_single(vaddr);
 
     return 0;
 }
 
-int map_pages(const void* vaddr, const void* paddr, int flags, size_t count)
+int map_pages(void* vaddr, const void* paddr, u64 flags, size_t count)
 {
     size_t pages_mapped = 0;
 
@@ -87,36 +161,29 @@ int map_pages(const void* vaddr, const void* paddr, int flags, size_t count)
         if (err) {
             while (pages_mapped--) {
                 vaddr = (u8*)vaddr - PAGE_SIZE;
+                paddr = (u8*)paddr - PAGE_SIZE;
+
                 unmap_page(vaddr);
             }
 
             return err;
         }
 
-        pages_mapped++;
-
         vaddr = (u8*)vaddr + PAGE_SIZE;
         paddr = (u8*)paddr + PAGE_SIZE;
+
+        pages_mapped++;
     }
 
-    return 0;
+    return 0; 
 }
 
-int unmap_pages(const void* vaddr, size_t count)
+int unmap_pages(void* vaddr, size_t count)
 {
-    /* 
-     * Only need to check for an error on the first unmapping,
-     * since the only return value for unmap_page is -ERR_MISALIGNED_ADDR
-     */
-    int err = unmap_page(vaddr);
-    if (err)
-        return err;
-
-    vaddr = (u8*)vaddr + PAGE_SIZE;
-    count--;
-
     while (count--) {
-        unmap_page(vaddr);
+        int err = unmap_page(vaddr);
+        if (err)
+            return err; 
         vaddr = (u8*)vaddr + PAGE_SIZE;
     }
 

@@ -3,50 +3,74 @@
 #include <crescent/asm/multiboot2.h>
 #include <crescent/asm/paging.h>
 
-#define SERIAL_COM1 0x3F8
-
 .section .rodata
 bad_multiboot_magic: .string "Error: Bad Multiboot 2 magic number in eax\n\rSystem halted"
 bad_multiboot_align: .string "Error: Bad Multiboot 2 information alignment\n\rSystem halted"
+bad_cpuid: .string "Error: No cpuid\n\rSystem halted"
+bad_long_mode: .string "Error: no long mode\n\rSystem halted"
+bad_sse_mmx: .string "Error: SSE or MMX not supported\n\rSystem halted"
 
 .section .early.text, "ax"
 .globl do_early_checks
 
 do_early_checks:
-    /* In case of any errors, the direction flag needs to be cleared */
-    cld
-
-    /* multiboot2 sanity check */
     cmpl $MULTIBOOT2_BOOTLOADER_MAGIC, %eax
     jne bad_multiboot_magic_err
-    /* check for alignment for multiboot info */
     testl $7, %ebx
     jnz bad_multiboot_align_err
-
+.cpuid_check:
+    pushfl
+    popl %eax
+    movl %eax, %ecx
+    xorl $(1 << 21), %eax
+    pushl %eax
+    popfl
+    pushfl
+    popl %eax
+    pushl %ecx
+    popfl
+    cmpl %ecx, %eax
+    je bad_cpuid_err
+    /* ecx can be used for input with cpuid, so set this to 0 */
+    xorl %ecx, %ecx
+.long_mode_check:
+    movl $0x80000000, %eax
+    cpuid
+    cmpl $0x80000001, %eax
+    jb bad_long_mode_err
+    movl $0x80000001, %eax
+    cpuid
+    testl $(1 << 29), %edx
+    jz bad_long_mode_err
+.sse_check:
+    movl $0x01, %eax
+    cpuid
+    /* SSE1 */
+    testl $(1 << 25), %edx
+    jz bad_sse_mmx_err
+    /* SSE2 */
+    testl $(1 << 26), %edx
+    jz bad_sse_mmx_err
+    /* MMX */
+    testl $(1 << 23), %edx
+    jz bad_sse_mmx_err
+.done:
     ret
 
+
 bad_multiboot_magic_err:
-    movw $SERIAL_COM1, %dx
     leal V2P(bad_multiboot_magic), %esi
-    jmp print_err_loop
-
+    jmp critical_boot_err
 bad_multiboot_align_err:
-    movw $SERIAL_COM1, %dx
     leal V2P(bad_multiboot_align), %esi
-
-print_err_loop:
-    /* Load a character into al from esi */
-    lodsb
-
-    /* Check for null character */
-    cmpb $0, %al
-    je early_check_hlt
-
-    /* Output to the serial port */
-    outb %al, %dx
-    jmp print_err_loop
-
-early_check_hlt:
-    hlt
-    jmp early_check_hlt
+    jmp critical_boot_err
+bad_cpuid_err:
+    leal V2P(bad_cpuid), %esi
+    jmp critical_boot_err
+bad_long_mode_err:
+    leal V2P(bad_long_mode), %esi
+    jmp critical_boot_err
+bad_sse_mmx_err:
+    leal V2P(bad_sse_mmx), %esi
+    jmp critical_boot_err
 

@@ -1,5 +1,7 @@
--fno-stack-protector
 -ffreestanding
+-fno-stack-protector
+-mno-red-zone 
+-mcmodel=large
 -Wall
 -Wextra
 -Wshadow

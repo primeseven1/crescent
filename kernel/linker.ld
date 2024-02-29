@@ -1,6 +1,6 @@
 ENTRY(_start)
 
-KERNEL_VMA_OFFSET = 0xC0000000;
+KERNEL_VMA_OFFSET = 0xFFFFFF8000000000;
 
 SECTIONS {
     . = 2M;
@@ -8,8 +8,8 @@ SECTIONS {
     _kernel_start = .;
     _kernel_readonly_start = .;
 
-    .multiboot2.rodata : {
-        KEEP(*(.multiboot2.rodata))
+    .multiboot2.data : {
+        KEEP(*(.multiboot2.data))
     }
 
     .early.text : {
@@ -37,6 +37,6 @@ SECTIONS {
         *(.bss)
     }
 
-    . = ALIGN(4096);
+    . = ALIGN(4K);
     _kernel_end = .;
 }

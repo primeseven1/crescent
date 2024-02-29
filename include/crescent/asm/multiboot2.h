@@ -117,7 +117,7 @@ enum multiboot_mmap_types {
     MULTIBOOT_MEMORY_ACPI_RECLAIMABLE,
     MULTIBOOT_MEMORY_NVS,
     MULTIBOOT_MEMORY_BADRAM
-} __attribute__((packed));
+};
 
 struct multiboot_mmap_entry {
     u64 addr;

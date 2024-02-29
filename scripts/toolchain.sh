@@ -8,14 +8,14 @@ GCC_VERSION="13.1.0"
 BINUTILS_VERSION="2.40"
 
 # The prefix can be anything you want
-TARGET="i686-elf"
+TARGET="x86_64-elf"
 PREFIX="$HOME/.toolchains/gcc/$TARGET"
 export PATH="$PREFIX/bin:$PATH"
 
 # Any flags the user wants to put in, like -j or something like that
 MAKE_FLAGS="$@"
 # CFLAGS for libgcc
-LIBGCC_CFLAGS="-O2"
+LIBGCC_CFLAGS="-mno-red-zone -mcmodel=large -g -O2"
 
 mkdir -p $PREFIX
 
