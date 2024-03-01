@@ -4,11 +4,11 @@
 #include <crescent/asm/paging.h>
 
 .section .rodata
-bad_multiboot_magic: .string "Error: Bad Multiboot 2 magic number in eax\n\rSystem halted"
-bad_multiboot_align: .string "Error: Bad Multiboot 2 information alignment\n\rSystem halted"
-bad_cpuid: .string "Error: No cpuid\n\rSystem halted"
-bad_long_mode: .string "Error: no long mode\n\rSystem halted"
-bad_sse_mmx: .string "Error: SSE or MMX not supported\n\rSystem halted"
+bad_multiboot_magic: .string "Critical Error: Not loaded by a Multiboot 2 bootloader\n"
+bad_multiboot_align: .string "Critical Error: Bad Multiboot 2 information alignment\n"
+bad_cpuid: .string "Critical Error: CPU doesn't support CPUID\n"
+bad_long_mode: .string "Critical Error: CPU doesn't support long mode\n"
+bad_sse_mmx: .string "Critical Error: SSE/MMX not supported by the CPU\n"
 
 .section .early.text, "ax"
 .globl do_early_checks
