@@ -1,4 +1,3 @@
-#include "crescent/kernel.h"
 #include <crescent/asm/multiboot2.h>
 #include <crescent/asm/paging.h>
 
