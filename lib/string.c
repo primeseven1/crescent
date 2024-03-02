@@ -1,5 +1,13 @@
 #include <crescent/string.h>
 
+size_t strlen(const char* str)
+{
+    size_t len = 0;
+    while (str[len])
+        len++;
+    return len;
+}
+
 void* memset(void* dest, int val, size_t count)
 {
     u8* d = dest;

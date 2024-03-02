@@ -2,7 +2,8 @@
 
 #include <crescent/types.h>
 
-static inline void __real_cpuid(u32* eax, u32* ebx, u32* ecx, u32* edx)
+/* Internal use */
+static inline void _real_cpuid(u32* eax, u32* ebx, u32* ecx, u32* edx)
 {
     asm volatile("cpuid" 
                  : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) 
@@ -15,5 +16,5 @@ static inline void cpuid_all(unsigned int page, int count,
 {
     *eax = page;
     *ecx = count;
-    __real_cpuid(eax, ebx, ecx, edx);
+    _real_cpuid(eax, ebx, ecx, edx);
 }
