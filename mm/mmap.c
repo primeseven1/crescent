@@ -1,7 +1,7 @@
 #include <crescent/kernel.h>
 #include <crescent/mmap.h>
 
-const struct multiboot_tag_mmap* multiboot_mmap = NULL;
+static const struct multiboot_tag_mmap* multiboot_mmap = NULL;
 
 size_t get_total_free_memory(void)
 {
