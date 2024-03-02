@@ -161,4 +161,16 @@ struct multiboot_tag_locations {
     const struct multiboot_tag_string* bootloader_name;
 };
 
+/*
+ * Get the multiboot tag locations
+ *
+ * Notes:
+ * The multiboot tags the bootloader provides get mapped to read only memory
+ * This function should also only be called once
+ *
+ * Return value:
+ * Returns the virtual addresses of the multiboot tag locations
+ */
+const struct multiboot_tag_locations* get_mbi_tag_locations(const struct multiboot_info* mbi_paddr);
+
 #endif /* __ASSEMBLY_FILE__ */

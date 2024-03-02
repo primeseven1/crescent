@@ -27,7 +27,7 @@ static const struct multiboot_info* map_mbi(const struct multiboot_info* mbi_pad
     return mbi_vaddr;
 }
 
-struct multiboot_tag_locations* get_mbi_tag_locations(const struct multiboot_info* mbi_paddr)
+const struct multiboot_tag_locations* get_mbi_tag_locations(const struct multiboot_info* mbi_paddr)
 {
     const struct multiboot_info* mbi = map_mbi(mbi_paddr);
 

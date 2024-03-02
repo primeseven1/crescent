@@ -3,8 +3,6 @@
 #include <crescent/conversions.h>
 #include <crescent/mmap.h>
 
-struct multiboot_tag_locations* get_mbi_tag_locations(const struct multiboot_info* mbi_paddr);
-
 _Noreturn void kernel_main(const struct multiboot_info* mbi_paddr)
 {
     const struct multiboot_tag_locations* locations = get_mbi_tag_locations(mbi_paddr);
@@ -15,7 +13,7 @@ _Noreturn void kernel_main(const struct multiboot_info* mbi_paddr)
     u16* vid_mem = (u16*)(KERNEL_VMA_OFFSET + 0x350000);
     map_page(vid_mem, (void*)0xB8000, PT_PRESENT | PT_READ_WRITE);
 
-    size_t total_mem = get_total_free_memory() / 0x100000;
+    size_t total_mem = get_total_mmap_free_memory() / 0x100000;
     char total_bytes_str[22];
     ulltostr(total_mem, total_bytes_str, 10, sizeof(total_bytes_str));
 
