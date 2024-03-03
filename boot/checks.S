@@ -42,6 +42,8 @@ do_early_checks:
     cpuid
     testl $(1 << 29), %edx
     jz bad_long_mode_err
+    /* clear ECX again */
+    xorl %ecx, %ecx
 .sse_check:
     movl $0x01, %eax
     cpuid

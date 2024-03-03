@@ -54,6 +54,15 @@ static inline void tlb_flush_all(void)
 }
 
 /*
+ * Get the physical address vaddr maps to
+ *
+ * Return values:
+ * NULL: pml4/pdpt/pd/pt entries are not present, or maybe the address is actually NULL
+ * The address: Successful
+ */
+void* get_paddr(const void* vaddr);
+
+/*
  * Map a page table
  * Notes: 
  * This function will automatically align vaddr, and it will NOT automatically align pt_paddr
