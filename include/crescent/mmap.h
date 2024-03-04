@@ -22,6 +22,19 @@ size_t get_total_mmap_free_memory(void);
  */
 bool is_paddr_mmap_region_free(void* paddr, size_t size);
 
+/*
+ * Get a memory map entry
+ *
+ * Notes:
+ * Do not assume that just because it's free in the entry means it's actually free
+ * use is_paddr_mmap_region free to verify that, it checks for overlapping memory regions
+ *
+ * Return values:
+ * NULL: Index is either invalid or out of range, or store_mbi_mmap hasn't been called
+ * The entry: Success
+ */
+const struct multiboot_mmap_entry* get_mmap_entry(int index);
+
 /* 
  * Store the multiboot memory map so the memory management part of the kernel can use it
  *

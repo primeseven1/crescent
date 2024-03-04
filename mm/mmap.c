@@ -55,6 +55,21 @@ bool is_paddr_mmap_region_free(void* paddr, size_t size)
     return ret;
 }
 
+const struct multiboot_mmap_entry* get_mmap_entry(int index)
+{
+    if (unlikely(!multiboot_mmap))
+        return NULL;
+
+    size_t offset = multiboot_mmap->entry_size * index;
+    const struct multiboot_mmap_entry* ret = 
+        (struct multiboot_mmap_entry*)((u8*)multiboot_mmap->entries + offset);
+
+    if ((u8*)ret >= (u8*)multiboot_mmap + multiboot_mmap->tag.size || ret < multiboot_mmap->entries)
+        return NULL;
+
+    return ret;
+}
+
 void store_mbi_mmap(const struct multiboot_tag_mmap* mmap_tag)
 {
     multiboot_mmap = mmap_tag;
