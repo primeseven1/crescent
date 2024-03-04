@@ -84,6 +84,11 @@ map_higher_half:
     movl %eax, V2P(boot_pml4)
     movl %eax, V2P(boot_pml4) + 511 * 8
 
+    /* Doing recursive mapping at entry 510 since the kernel is mapped at 511 */
+    leal V2P(boot_pml4), %eax
+    orl $0x03, %eax
+    movl %eax, V2P(boot_pml4) + 510 * 8
+
     leal V2P(boot_pml4), %eax
 	movl %eax, %cr3
 

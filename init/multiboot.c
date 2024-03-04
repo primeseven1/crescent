@@ -10,8 +10,9 @@ static const struct multiboot_info* map_mbi(const struct multiboot_info* mbi_pad
 
     int offset = (uintptr_t)mbi_paddr - (uintptr_t)PAGE_ALIGN(mbi_paddr);
     struct multiboot_info* mbi_vaddr = (struct multiboot_info*)(KERNEL_VMA_OFFSET + offset);
-    
-    int err = map_page_table(mbi_vaddr, V2P(multiboot_page_table), PT_PRESENT);
+   
+    /* Make this read/write, otherwise map_page will page fault when mapping the pages */
+    int err = map_page_table(mbi_vaddr, V2P(multiboot_page_table), PT_PRESENT | PT_READ_WRITE);
     if (err)
         asm volatile("ud2");
 
