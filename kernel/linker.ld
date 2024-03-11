@@ -37,6 +37,10 @@ SECTIONS {
         *(.bss)
     }
 
+    /* 
+     * Align this so that grub doesn't try to put the multiboot info in the middle of a 
+     * page where the kernel is mapped 
+     */
     . = ALIGN(4K);
     _kernel_end = .;
 }

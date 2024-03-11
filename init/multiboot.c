@@ -1,3 +1,4 @@
+#include <crescent/kernel.h>
 #include <crescent/asm/multiboot2.h>
 #include <crescent/asm/paging.h>
 
@@ -10,20 +11,18 @@ static const struct multiboot_info* map_mbi(const struct multiboot_info* mbi_pad
 
     int offset = (uintptr_t)mbi_paddr - (uintptr_t)PAGE_ALIGN(mbi_paddr);
     struct multiboot_info* mbi_vaddr = (struct multiboot_info*)(KERNEL_VMA_OFFSET + offset);
-   
-    /* Make this read/write, otherwise map_page will page fault when mapping the pages */
-    int err = map_page_table(mbi_vaddr, V2P(multiboot_page_table), PT_PRESENT | PT_READ_WRITE);
-    if (err)
-        asm volatile("ud2");
 
-    err = map_page(mbi_vaddr, mbi_paddr, PT_PRESENT);
-    if (err)
+    /* Should not error, since no page table should be mapped at the address we want */
+    map_page_table(mbi_vaddr, V2P(multiboot_page_table), 0);
+    map_page(mbi_vaddr, mbi_paddr, PT_PRESENT);
+
+    /* Multiboot info is too big, multiboot info is usually 4KiB in size or so */
+    if (unlikely(mbi_vaddr->total_size >= (u32)0x200000 - offset))
         asm volatile("ud2");
 
     size_t num_pages = (mbi_vaddr->total_size + offset) / 4096;
-    err = map_pages((u8*)mbi_vaddr + PAGE_SIZE, (u8*)mbi_paddr + PAGE_SIZE, PT_PRESENT, num_pages);
-    if (err)
-        asm volatile("ud2");
+    /* Should not error since we already made sure the multiboot info isn't too big */
+    map_pages((u8*)mbi_vaddr + PAGE_SIZE, (u8*)mbi_paddr + PAGE_SIZE, PT_PRESENT, num_pages);
 
     return mbi_vaddr;
 }

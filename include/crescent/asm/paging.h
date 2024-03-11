@@ -14,9 +14,16 @@
 #include <crescent/kernel.h>
 #include <crescent/types.h>
 
-#define V2P(a) (void*)((uintptr_t)(a) - KERNEL_VMA_OFFSET)
-#define P2V(a) (void*)((uintptr_t)(a) + KERNEL_VMA_OFFSET)
+#define V2P(a) ((void*)((uintptr_t)(a) - KERNEL_VMA_OFFSET))
+#define P2V(a) ((void*)((uintptr_t)(a) + KERNEL_VMA_OFFSET))
+
+/* Align addresses based on how much memory you can map with a single entry */
+#define PAGE_DIRECTORY_POINTER_ALIGN(a) ((void*)((uintptr_t)(a) / 0x8000000000 * 0x8000000000))
+#define PAGE_DIRECTORY_ALIGN(a) ((void*)((uintptr_t)(a) / 0x40000000 * 0x40000000))
+#define PAGE_TABLE_ALIGN(a) ((void*)((uintptr_t)(a) / 0x200000 * 0x200000))
 #define PAGE_ALIGN(a) ((void*)((uintptr_t)(a) / PAGE_SIZE * PAGE_SIZE))
+
+typedef u64 generic_pte_t;
 
 typedef u64 pml4e_t;
 typedef u64 pdpte_t;
@@ -65,13 +72,17 @@ void* get_paddr(const void* vaddr);
 /*
  * Map a page table
  * Notes: 
- * This function will automatically align vaddr, and it will NOT automatically align pt_paddr
+ * This function will automatically align vaddr, and pt_paddr must be aligned by 4K
+ *
+ * This will also automatically add the present and writable flags, as this is needed
+ * for recursive page tables to work correctly, so passing 0 to flags is valid
  *
  * Return values:
  * -E2BIG: pt_paddr is too big
  * -EINVAL: Invalid flags, or vaddr is non-canonical
  * -EADDRNOTAVAIL: pml4/pdpt entries are not present
- * -EBUSY: Page directory entry already present
+ * -EBUSY: Page directory entry already present, 
+ *  or the vaddr uses the recursive PML4 entry
  * 0: Success
  */
 int map_page_table(void* vaddr, const pte_t* pt_paddr, u64 flags);
@@ -84,6 +95,7 @@ int map_page_table(void* vaddr, const pte_t* pt_paddr, u64 flags);
  * Return values:
  * -EINVAL: vaddr is non-canonical
  * -EADDRNOTAVAIL: pml4/pdpt entries are not present
+ * -EBUSY: vaddr uses the recursive PML4 entry
  * 0: Success
  */
 int unmap_page_table(void* vaddr);
@@ -97,7 +109,8 @@ int unmap_page_table(void* vaddr);
  * -E2BIG: paddr is bigger than the amount the CPU supports
  * -EINVAL: Invalid flags, or vaddr is non-canonical
  * -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
- * -EBUSY: Page table entry already present
+ * -EBUSY: Page table entry already present, 
+ *  or the vaddr uses the recursive PML4 entry
  * 0: Success
  */
 int map_page(void* vaddr, const void* paddr, u64 flags);
@@ -110,6 +123,7 @@ int map_page(void* vaddr, const void* paddr, u64 flags);
  * Return values:
  * -EINVAL: vaddr is non-canonical
  * -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
+ * -EBUSY: vaddr uses the recursive PML4 entry
  * 0: Success
  */
 int unmap_page(void* vaddr);
