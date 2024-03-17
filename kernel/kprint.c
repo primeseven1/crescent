@@ -3,7 +3,7 @@
 #include <crescent/string.h>
 #include <crescent/types.h>
 
-void kprint_format_llong(long long val, int base, void (*cb)(const char*))
+static void kprint_format_llong(long long val, int base, void (*cb)(const char*))
 {
     char str_val[sizeof(long long) * 8 + 1];
     int err = lltostr(val, str_val, base, sizeof(str_val));
@@ -13,7 +13,7 @@ void kprint_format_llong(long long val, int base, void (*cb)(const char*))
         cb("(invalid)");
 }
 
-void kprint_format_ullong(unsigned long long val, int base, void (*cb)(const char*))
+static void kprint_format_ullong(unsigned long long val, int base, void (*cb)(const char*))
 {
     char str_val[sizeof(long long) * 8 + 1];
     int err = ulltostr(val, str_val, base, sizeof(str_val));
@@ -23,7 +23,7 @@ void kprint_format_ullong(unsigned long long val, int base, void (*cb)(const cha
         cb("(invalid)");
 }
 
-void kprint_format_double(double val, int afterpoint, void (*cb)(const char*))
+static void kprint_format_double(double val, int afterpoint, void (*cb)(const char*))
 {
     char str_val[sizeof(double) * 8 + 1];
     int err = dtostr(val, str_val, afterpoint, sizeof(str_val));
@@ -50,6 +50,8 @@ static unsigned int handle_multichar_fmt_l(const char* rest, va_list va, void (*
             kprint_format_llong(va_arg(va, long long), 10, cb);
         else if (*rest == 'u')
             kprint_format_ullong(va_arg(va, unsigned long long), 10, cb);
+        else if (*rest == 'x')
+            kprint_format_ullong(va_arg(va, unsigned long long), 16, cb);
 
         return 2;
     case 'f':
@@ -85,6 +87,9 @@ void _vkprint_e9(const char* fmt, va_list va)
         case 'i':
         case 'd':
             kprint_format_llong(va_arg(va, int), 10, _kprint_e9_noformat);
+            break;
+        case 'u':
+            kprint_format_ullong(va_arg(va, unsigned int), 10, _kprint_e9_noformat);
             break;
         case 'x':
             kprint_format_ullong(va_arg(va, unsigned int), 16, _kprint_e9_noformat);

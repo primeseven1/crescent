@@ -2,12 +2,9 @@
 
 #include <crescent/types.h>
 
-void kprint_format_llong(long long val, int base, void (*cb)(const char*));
-void kprint_format_ullong(unsigned long long val, int base, void (*cb)(const char*));
-void kprint_format_double(double val, int afterpoint, void (*cb)(const char*));
-
 #ifdef CONFIG_DEBUG
 
+/* do not use these functions directly! */
 void _kprint_e9_noformat(const char* str);
 void _vkprint_e9(const char* fmt, va_list va);
 __attribute__((format(printf, 1, 2)))

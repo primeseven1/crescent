@@ -3,7 +3,7 @@
 #include <crescent/asm/paging.h>
 #include <crescent/panic.h>
 
-static struct multiboot_tag_locations locations;
+static struct multiboot_tag_locations locations = { 0 };
 
 static const struct multiboot_info* map_mbi(const struct multiboot_info* mbi_paddr)
 {
@@ -17,9 +17,10 @@ static const struct multiboot_info* map_mbi(const struct multiboot_info* mbi_pad
     map_page_table(mbi_vaddr, V2P(multiboot_page_table), 0);
     map_page(mbi_vaddr, mbi_paddr, PT_PRESENT);
 
-    /* Multiboot info is too big, multiboot info is usually 4KiB in size or so */
+    /* Multiboot info is too big, multiboot info is usually 4KiB in size or so, probably even less */
     if (unlikely(mbi_vaddr->total_size >= (u32)0x200000 - offset))
-        panic("Multiboot information too big!\n");
+        panic("Multiboot info is too big, size is %u, max size is %u\n", 
+            mbi_vaddr->total_size, 0x200000 - offset);
 
     size_t num_pages = (mbi_vaddr->total_size + offset) / 4096;
     /* Should not error since we already made sure the multiboot info isn't too big */
