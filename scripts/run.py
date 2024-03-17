@@ -42,7 +42,7 @@ def main():
         print(f"Error: {crescent_iso} does not exist")
         sys.exit(1)
 
-    qemu_args: str = f"-m 512M -cdrom {crescent_iso} -net none -serial stdio"
+    qemu_args: str = f"-m 512M -cdrom {crescent_iso} -net none -debugcon stdio "
 
     if "-d" in argv or "--debug" in argv:
         qemu_args += " -s -S"

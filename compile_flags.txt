@@ -9,3 +9,4 @@
 -Wpointer-arith
 -I./include
 -std=gnu17
+-DCONFIG_DEBUG
