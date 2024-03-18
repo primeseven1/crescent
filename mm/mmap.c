@@ -55,7 +55,7 @@ bool is_paddr_mmap_region_free(void* paddr, size_t size)
     return ret;
 }
 
-const struct multiboot_mmap_entry* get_mmap_entry(int index)
+const struct multiboot_mmap_entry* get_mmap_entry(unsigned int index)
 {
     if (unlikely(!multiboot_mmap))
         return NULL;

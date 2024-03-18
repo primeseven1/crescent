@@ -9,7 +9,7 @@
 #define V2P(a) ((a) - KERNEL_VMA_OFFSET)
 #define P2V(a) ((a) + KERNEL_VMA_OFFSET)
 
-#else
+#else /* __ASSEMBLY_FILE__ */
 
 #include <crescent/kernel.h>
 #include <crescent/types.h>
@@ -30,6 +30,14 @@ typedef u64 pdpte_t;
 typedef u64 pde_t;
 typedef u64 pte_t;
 
+enum pt_levels {
+    PT_LEVEL_PAGE,
+    PT_LEVEL_PT,
+    PT_LEVEL_PD,
+    PT_LEVEL_PDPT,
+    PT_LEVEL_PML4
+};
+
 enum pt_flags {
     PT_PRESENT = (1 << 0),
     PT_READ_WRITE = (1 << 1),
@@ -46,11 +54,18 @@ enum pt_flags {
     PT_EXECUTE_DISABLE = ((u64)1 << 63)
 };
 
+/*
+ * Flush a single entry in the TLB
+ *
+ * Paramaters:
+ * - vaddr: Virtual address
+ */
 static inline void tlb_flush_single(void* addr)
 {
     asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
 }
 
+/* Flush the entire TLB */
 static inline void tlb_flush_all(void)
 {
     asm volatile("movq %%cr3, %%rax\n"
@@ -61,92 +76,106 @@ static inline void tlb_flush_all(void)
 }
 
 /*
- * Get the physical address vaddr maps to
+ * Get the physical address that vaddr maps to
  *
- * Return values:
- * NULL: pml4/pdpt/pd/pt entries are not present, or maybe the address is actually NULL
- * The address: Successful
+ * --- Parameters ---
+ * - vaddr: The virtual address
+ *
+ * --- Return values ---
+ * - Returns NULL if the page is unmapped, otherwise it returns the physical address
  */
 void* get_paddr(const void* vaddr);
 
 /*
  * Map a page table
- * Notes: 
- * This function will automatically align vaddr, and pt_paddr must be aligned by 4K
  *
- * This will also automatically add the present and writable flags, as this is needed
- * for recursive page tables to work correctly, so passing 0 to flags is valid
+ * --- Parameters ---
+ * - vaddr: The virtual address, must be canonical
+ * - pt_paddr: The physical address of the table, must be aligned by 4K
+ * - flags: Page table flags, PT_PRESENT and PT_WRITABLE are automatically added
+ * - level: The page table level, look at the pt_levels enum for valid values
  *
- * Return values:
- * -E2BIG: pt_paddr is too big
- * -EINVAL: Invalid flags, or vaddr is non-canonical
- * -EADDRNOTAVAIL: pml4/pdpt entries are not present
- * -EBUSY: Page directory entry already present, 
- *  or the vaddr uses the recursive PML4 entry
- * 0: Success
+ * --- Return values ---
+ * - -E2BIG: pt_paddr has a bigger address than the CPU supports
+ * - -EINVAL: Invalid flags, non-canonical vaddr, or pt_paddr is not aligned
+ * - -EBUSY: Page table is already present, or the PML4 index is the recursive page table entry
+ * - -EADDRNOTAVAIL: PML4/PDPT/PD entries are not present, depends on the level of the page table
+ * - 0: Success
  */
-int map_page_table(void* vaddr, const pte_t* pt_paddr, u64 flags);
+int map_page_table(void* vaddr, const generic_pte_t* pt_paddr, u64 flags, unsigned int level);
 
 /*
  * Unmap a page table
- * Notes:
- * vaddr is automatically aligned
+ * 
+ * --- Parameters ---
+ * - vaddr: The virtual address
+ * - level: The page table level, look at the pt_levels enum for more info
  *
- * Return values:
- * -EINVAL: vaddr is non-canonical
- * -EADDRNOTAVAIL: pml4/pdpt entries are not present
- * -EBUSY: vaddr uses the recursive PML4 entry
- * 0: Success
+ * --- Return values ---
+ * - -EINVAL: vaddr is non-canonical, or level is invalid
+ * - -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
+ * - -EBUSY: vaddr uses the recursive PML4 entry
+ * - 0: Success
  */
-int unmap_page_table(void* vaddr);
+int unmap_page_table(void* vaddr, unsigned int level);
 
 /*
  * Map a page into memory
- * Notes:
- * This function automatically aligns vaddr and paddr, be aware of that to see if you need to map more pages
+ * 
+ * --- Parameters ---
+ * - vaddr: The virtual address, automatically aligned
+ * - paddr: The physical address
+ * - flags: Page flags
  *
- * Return values:
- * -E2BIG: paddr is bigger than the amount the CPU supports
- * -EINVAL: Invalid flags, or vaddr is non-canonical
- * -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
- * -EBUSY: Page table entry already present, 
- *  or the vaddr uses the recursive PML4 entry
- * 0: Success
+ * --- Return values ---
+ * - -E2BIG: paddr is bigger than the amount the CPU supports
+ * - -EINVAL: Invalid flags, or vaddr is non-canonical
+ * - -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
+ * - -EBUSY: Page table entry already present, or the vaddr uses the recursive PML4 entry
+ * - 0: Success
  */
 int map_page(void* vaddr, const void* paddr, u64 flags);
 
 /*
  * Unmap a page
- * Notes:
- * This function automatically aligns vaddr, be aware of that to see if you need to unmap more pages
  *
- * Return values:
- * -EINVAL: vaddr is non-canonical
- * -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
- * -EBUSY: vaddr uses the recursive PML4 entry
- * 0: Success
+ * --- Parameters ---
+ * - vaddr: Virtual address, automatically aligned
+ *
+ * --- Return values ---
+ * - -EINVAL: vaddr is non-canonical
+ * - -EADDRNOTAVAIL: pml4/pdpt/pd entries are not present
+ * - -EBUSY: vaddr uses the recursive PML4 entry
+ * - 0: Success
  */
 int unmap_page(void* vaddr);
 
 /*
  * Map several pages
- * Notes:
- * This automatically aligns vaddr and paddr, make sure you don't need to map more pages
- * This will also unmap every page it successfully mapped if it fails
  *
- * Return values:
- * The exact same as map_page
+ * --- Notes ---
+ * - This unmaps all pages that were previously mapped if an error happens
+ *
+ * --- Parameters ---
+ * - vaddr: Virtual address
+ * - paddr: Physical address
+ * - flags: Page flags
+ * - count: Number of pages
+ *
+ * --- Return values ---
+ * - The exact same as map_page
  */
 int map_pages(void* vaddr, const void* paddr, u64 flags, size_t count);
 
 /*
  * Unmap several pages
- * Notes:
- * This automatically aligns vaddr and paddr, make sure you don't need to unmap more pages
- * This does NOT remap the pages that it previously unmapped on error if it doesn't fail on the first unmapping
  *
- * Return values:
- * The exact same as unmap_page
+ * --- Parameters ---
+ * - vaddr: Virtual address
+ * - count: Number of pages
+ *
+ * --- Return values ---
+ * - The exact same as unmap_page
  */
 int unmap_pages(void* vaddr, size_t count);
 

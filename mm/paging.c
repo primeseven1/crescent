@@ -6,31 +6,35 @@
 /*
  * These addresses are based on the recursive mapping happening at PML4 entry 510,
  * since 511 is taken by the kernel sections
- *
- * Since these functions interpret the page table entries differently depending on the context,
- * using generic_pte_t is used here
  */
-static generic_pte_t* const pml4_vaddr = (generic_pte_t*)0xFFFFFF7FBFDFE000;
-static generic_pte_t* const pdpt_vaddr = (generic_pte_t*)0xFFFFFF7FBFC00000;
-static generic_pte_t* const pd_vaddr = (generic_pte_t*)0xFFFFFF7F80000000;
-static generic_pte_t* const pt_vaddr = (generic_pte_t*)0xFFFFFF0000000000;
+static pml4e_t* const pml4_vaddr = (pml4e_t*)0xFFFFFF7FBFDFE000;
+static pdpte_t* const pdpt_vaddr = (pdpte_t*)0xFFFFFF7FBFC00000;
+static pde_t* const pd_vaddr = (pde_t*)0xFFFFFF7F80000000;
+static pte_t* const pt_vaddr = (pte_t*)0xFFFFFF0000000000;
 
 static inline bool is_vaddr_canonical(const void* vaddr)
 {
-    return ((uintptr_t)vaddr >> 48 == 0 || (uintptr_t)vaddr >> 48 == 0xFFFF);
+    /* Assuming a 48 bit virtual address space, which is safe to assume */ 
+    const void* non_canonical_start = (void*)0x800000000000;
+    const void* non_canonical_end = (void*)0xFFFF7FFFFFFFFFFF;
+
+    return (vaddr < non_canonical_start || vaddr > non_canonical_end);
 }
 
-static inline bool is_paddr_good(const void* paddr)
+static inline bool is_paddr_supported(const void* paddr)
 {
-    static int num_paddr_bits = 0;
-    if (unlikely(!num_paddr_bits)) {
+    static void* max_ptr = NULL;
+
+    if (unlikely(!max_ptr)) {
+        /* First get the amount of supported bits using cpuid */
         u32 eax, ebx, ecx, edx;
         cpuid_all(0x80000008, 0, &eax, &ebx, &ecx, &edx);
-        num_paddr_bits = eax & 0xFF;
+        int bits = eax & 0xFF;
+        /* Now get the maximum integer for the amount the CPU supports */
+        max_ptr = (void*)((1ull << bits) - 1);
     }
 
-    /* Make sure that the bits above the supported amount of bits are not set */
-    return (uintptr_t)paddr >> num_paddr_bits == 0;
+    return (paddr <= max_ptr);
 }
 
 static inline bool is_flags_good(u64 flags)
@@ -53,30 +57,27 @@ void* get_paddr(const void* vaddr)
     u64 pd_i = ((uintptr_t)vaddr >> 21) & 0x7FFFFFF;
     u64 pt_i = ((uintptr_t)vaddr >> 12) & 0xFFFFFFFFF;
 
-    pte_t**** pml4 = (pte_t****)pml4_vaddr;
-    if (!((pml4e_t)pml4[pml4_i] & PT_PRESENT))
+    if (!(pml4_vaddr[pml4_i] & PT_PRESENT))
         return NULL;
-    pte_t*** pdpt = (pte_t***)pdpt_vaddr;
-    if (!((pdpte_t)pdpt[pdpt_i] & PT_PRESENT))
+    if (!(pdpt_vaddr[pdpt_i] & PT_PRESENT))
         return NULL;
-    pte_t** pd = (pte_t**)pd_vaddr;
-    if (!((pde_t)pd[pd_i] & PT_PRESENT))
+    if (!(pd_vaddr[pd_i] & PT_PRESENT))
         return NULL;
-    pte_t* pt = (pte_t*)pt_vaddr;
-    if (!(pt[pt_i] & PT_PRESENT))
+    if (!(pt_vaddr[pt_i] & PT_PRESENT))
         return NULL;
 
-    return (void*)((pt[pt_i] & (~0xFFF | PT_EXECUTE_DISABLE)) + offset);
+    /* Now clear the page table flags, and add the offset to get the virtual address */
+    return (void*)((pt_vaddr[pt_i] & (~0xFFF | PT_EXECUTE_DISABLE)) + offset);
 }
 
-int map_page_table(void* vaddr, const pte_t* pt_paddr, u64 flags)
+int map_page_table(void* vaddr, const generic_pte_t* pt_paddr, u64 flags, unsigned int level)
 {
-    if (!is_paddr_good(pt_paddr))
+    if (!is_paddr_supported(pt_paddr))
         return -E2BIG;
     if (!is_flags_good(flags) || !is_vaddr_canonical(vaddr) || (uintptr_t)pt_paddr & 4095)
         return -EINVAL;
 
-    vaddr = PAGE_TABLE_ALIGN(vaddr);
+    vaddr = PAGE_ALIGN(vaddr);
 
     u64 pml4_i = ((uintptr_t)vaddr >> 39) & 0x01FF;
     u64 pdpt_i = ((uintptr_t)vaddr >> 30) & 0x3FFFF;
@@ -85,30 +86,47 @@ int map_page_table(void* vaddr, const pte_t* pt_paddr, u64 flags)
     if (pml4_i == RECURSIVE_PML4_ENTRY)
         return -EBUSY;
 
-    pde_t*** pml4 = (pde_t***)pml4_vaddr;
-    if (!((pml4e_t)pml4[pml4_i] & PT_PRESENT))
-        return -EADDRNOTAVAIL;
-    pde_t** pdpt = (pde_t**)pdpt_vaddr;
-    if (!((pdpte_t)pdpt[pdpt_i] & PT_PRESENT))
-        return -EADDRNOTAVAIL;
+    /* 
+     * The reason present and read/write is forced is because writing to the page 
+     * tables would cause a page fault without the flags 
+     */
+    switch (level) {
+    case PT_LEVEL_PT:
+        if (!(pml4_vaddr[pml4_i] & PT_PRESENT))
+            return -EADDRNOTAVAIL;
+        if (!(pdpt_vaddr[pdpt_i] & PT_PRESENT))
+            return -EADDRNOTAVAIL;
+        if (pd_vaddr[pd_i] & PT_PRESENT)
+            return -EBUSY;
+        pd_vaddr[pd_i] = (uintptr_t)pt_paddr | (flags | PT_PRESENT | PT_READ_WRITE);
+        break;
+    case PT_LEVEL_PD:
+        if (!(pml4_vaddr[pml4_i] & PT_PRESENT))
+            return -EADDRNOTAVAIL;
+        if (pdpt_vaddr[pdpt_i] & PT_PRESENT)
+            return -EBUSY;
+        pdpt_vaddr[pdpt_i] = (uintptr_t)pt_paddr | (flags | PT_PRESENT | PT_READ_WRITE);
+        break;
+    case PT_LEVEL_PDPT:
+        if (pml4_vaddr[pml4_i] & PT_PRESENT)
+            return -EBUSY;
+        pml4_vaddr[pml4_i] = (uintptr_t)pt_paddr | (flags | PT_PRESENT | PT_READ_WRITE);
+        break;
+    default:
+        return -EINVAL;
+    }
 
-    /* Remapping a whole page table while one is still present can be very bad */
-    pde_t* pd = (pde_t*)pd_vaddr;
-    if (((pde_t)pd[pd_i] & PT_PRESENT))
-        return -EBUSY;
-
-    pd[pd_i] = (uintptr_t)pt_paddr | (flags | PT_PRESENT | PT_READ_WRITE);
     tlb_flush_all();
 
     return 0;
 }
 
-int unmap_page_table(void* vaddr)
+int unmap_page_table(void* vaddr, unsigned int level)
 {
     if (!is_vaddr_canonical(vaddr))
         return -EINVAL;
 
-    vaddr = PAGE_TABLE_ALIGN(vaddr);
+    vaddr = PAGE_ALIGN(vaddr);
 
     u64 pml4_i = ((uintptr_t)vaddr >> 39) & 0x01FF;
     u64 pdpt_i = ((uintptr_t)vaddr >> 30) & 0x3FFFF;
@@ -117,15 +135,25 @@ int unmap_page_table(void* vaddr)
     if (pml4_i == RECURSIVE_PML4_ENTRY)
         return -EBUSY;
 
-    pde_t*** pml4 = (pde_t***)pml4_vaddr;
-    if (!((pml4e_t)pml4[pml4_i] & PT_PRESENT))
-        return -EADDRNOTAVAIL;
-    pde_t** pdpt = (pde_t**)pdpt_vaddr;
-    if (!((pdpte_t)pdpt[pdpt_i] & PT_PRESENT))
-        return -EADDRNOTAVAIL;
-
-    pde_t* pd = pd_vaddr;
-    pd[pd_i] = 0;
+    switch (level) {
+    case PT_LEVEL_PT:
+        if (!(pml4_vaddr[pml4_i] & PT_PRESENT))
+            return -EADDRNOTAVAIL;
+        if (!(pdpt_vaddr[pdpt_i] & PT_PRESENT))
+            return -EADDRNOTAVAIL;
+        pd_vaddr[pd_i] = 0;
+        break;
+    case PT_LEVEL_PD:
+        if (!(pml4_vaddr[pml4_i] & PT_PRESENT))
+            return -EADDRNOTAVAIL;
+        pdpt_vaddr[pdpt_i] = 0;
+        break;
+    case PT_LEVEL_PDPT:
+        pml4_vaddr[pml4_i] = 0;
+        break;
+    default:
+        return -EINVAL;
+    }
 
     tlb_flush_all();
 
@@ -134,7 +162,7 @@ int unmap_page_table(void* vaddr)
 
 int map_page(void* vaddr, const void* paddr, u64 flags)
 {
-    if (!is_paddr_good(paddr))
+    if (!is_paddr_supported(paddr))
         return -E2BIG;
     if (!is_vaddr_canonical(vaddr) || !is_flags_good(flags))
         return -EINVAL;
@@ -150,22 +178,17 @@ int map_page(void* vaddr, const void* paddr, u64 flags)
     if (pml4_i == RECURSIVE_PML4_ENTRY)
         return -EBUSY;
 
-    /* First time i've had to use a quadruple pointer for a practical reason... */
-    pte_t**** pml4 = (pte_t****)pml4_vaddr;
-    if (!((pml4e_t)pml4[pml4_i] & PT_PRESENT))
+    if (!(pml4_vaddr[pml4_i] & PT_PRESENT))
         return -EADDRNOTAVAIL;
-    pte_t*** pdpt = (pte_t***)pdpt_vaddr;
-    if (!((pdpte_t)pdpt[pdpt_i] & PT_PRESENT))
+    if (!(pdpt_vaddr[pdpt_i] & PT_PRESENT))
         return -EADDRNOTAVAIL;
-    pte_t** pd = (pte_t**)pd_vaddr;
-    if (!((pde_t)pd[pd_i] & PT_PRESENT))
+    if (!(pd_vaddr[pd_i] & PT_PRESENT))
         return -EADDRNOTAVAIL;
 
-    pte_t* pt = (pte_t*)pt_vaddr;
-    if (pt[pt_i] & PT_PRESENT)
+    if (pt_vaddr[pt_i] & PT_PRESENT)
         return -EBUSY;
 
-    pt[pt_i] = (uintptr_t)paddr | flags;
+    pt_vaddr[pt_i] = (uintptr_t)paddr | flags;
     tlb_flush_single(vaddr);
 
     return 0;
@@ -186,19 +209,14 @@ int unmap_page(void* vaddr)
     if (pml4_i == RECURSIVE_PML4_ENTRY)
         return -EBUSY;
 
-    /* Here we go again with quadruple pointers */
-    pte_t**** pml4 = (pte_t****)pml4_vaddr;
-    if (!((pml4e_t)pml4[pml4_i] & PT_PRESENT))
+    if (!(pml4_vaddr[pml4_i] & PT_PRESENT))
         return -EADDRNOTAVAIL;
-    pte_t*** pdpt = (pte_t***)pdpt_vaddr; 
-    if (!((pdpte_t)pdpt[pdpt_i] & PT_PRESENT))
+    if (!(pdpt_vaddr[pdpt_i] & PT_PRESENT))
         return -EADDRNOTAVAIL;
-    pte_t** pd = (pte_t**)pd_vaddr;
-    if (!((pde_t)pd[pd_i] & PT_PRESENT))
+    if (!(pd_vaddr[pd_i] & PT_PRESENT))
         return -EADDRNOTAVAIL;
 
-    pte_t* pt = (pte_t*)pt_vaddr;
-    pt[pt_i] = 0;
+    pt_vaddr[pt_i] = 0;
     tlb_flush_single(vaddr);
 
     return 0;

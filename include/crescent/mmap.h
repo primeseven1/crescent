@@ -5,35 +5,44 @@
 /*
  * Get the total amount of bytes of free memory 
  * 
- * Notes:
- * The result may be a few megabytes less than expected, either due to reserved memory,
+ * --- Notes ---
+ * - The result may be a few megabytes less than expected, either due to reserved memory,
  * or memory mapped regions
  *
- * If this returns 0, make sure you have called store_mbi_mmap
+ * --- Return values ---
+ * - 0: Call store_mbi_mmap
+ * - Any other value: Success
  */
 size_t get_total_mmap_free_memory(void);
 
 /*
  * Check if a physical address range is free according to the memory map
  *
- * Return values:
- * true: Self explanitory
- * false: Returned if paddr is not found, or if store_mbi_mmap hasn't been called yet
+ * --- Parameters ---
+ * - paddr: Physical address
+ * - size: How many bytes you want to check
+ *
+ * --- Return values ---
+ * - true: Self explanitory
+ * - false: Returned if paddr is not found, or if store_mbi_mmap hasn't been called yet
  */
 bool is_paddr_mmap_region_free(void* paddr, size_t size);
 
 /*
  * Get a memory map entry
  *
- * Notes:
- * Do not assume that just because it's free in the entry means it's actually free
+ * --- Notes ---
+ * - Do not assume that just because it's free in the entry means it's actually free
  * use is_paddr_mmap_region free to verify that, it checks for overlapping memory regions
  *
- * Return values:
- * NULL: Index is either invalid or out of range, or store_mbi_mmap hasn't been called
- * The entry: Success
+ * --- Parameters ---
+ * - index: The index of the memory map entry 
+ *
+ * --- Return values ---
+ * - NULL: Index is either invalid or out of range, or store_mbi_mmap hasn't been called
+ * - The entry: Success
  */
-const struct multiboot_mmap_entry* get_mmap_entry(int index);
+const struct multiboot_mmap_entry* get_mmap_entry(unsigned int index);
 
 /* 
  * Store the multiboot memory map so the memory management part of the kernel can use it

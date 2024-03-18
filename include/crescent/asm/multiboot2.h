@@ -164,12 +164,17 @@ struct multiboot_tag_locations {
 /*
  * Get the multiboot tag locations
  *
- * Notes:
- * The multiboot tags the bootloader provides get mapped to read only memory
- * This function should also only be called once
+ * --- Notes ---
+ * - The multiboot tags the bootloader provides get mapped to read only memory
+ * - If the multiboot info is too big (limit around 2MiB), it will result in a kernel panic,
+ *   since the function only allocates 1 page table for the multiboot info
+ * - Should only be called once
  *
- * Return value:
- * Returns the virtual addresses of the multiboot tag locations
+ * --- Parameters --
+ * - mbi_paddr: Physical address of the multiboot info
+ *
+ * --- Returns ---
+ * - A struct to the virutal addresses of the tag locations
  */
 const struct multiboot_tag_locations* get_mbi_tag_locations(const struct multiboot_info* mbi_paddr);
 

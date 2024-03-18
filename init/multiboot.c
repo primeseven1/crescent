@@ -14,7 +14,7 @@ static const struct multiboot_info* map_mbi(const struct multiboot_info* mbi_pad
     struct multiboot_info* mbi_vaddr = (struct multiboot_info*)(KERNEL_VMA_OFFSET + offset);
 
     /* Should not error, since no page table should be mapped at the address we want */
-    map_page_table(mbi_vaddr, V2P(multiboot_page_table), 0);
+    map_page_table(mbi_vaddr, V2P(multiboot_page_table), 0, PT_LEVEL_PT);
     map_page(mbi_vaddr, mbi_paddr, PT_PRESENT);
 
     /* Multiboot info is too big, multiboot info is usually 4KiB in size or so, probably even less */
