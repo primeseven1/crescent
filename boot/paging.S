@@ -18,73 +18,61 @@ boot_pt1:
 .section .early.text, "ax"
 .globl map_higher_half
 
-/*
- * Present + Writable: 0x03
- * Present: 0x01
- * PTE size: 8
- * Num PTE entries: 512
- */
 map_higher_half:
     leal V2P(boot_pt1), %edi 
-	movl $_kernel_start, %esi
+	movl $_kernel_start_paddr, %esi
 	movl $512, %ecx
 
 1:
-    cmpl $V2P(_kernel_end), %esi
+    cmpl $_kernel_end_paddr, %esi
     jge 3f
 
-    cmpl $_kernel_readonly_start, %esi
+    cmpl $_kernel_readonly_start_paddr, %esi
     jge .possibly_readonly 
 
 .not_readonly:
     movl %esi, %edx
+    /* present/writable */
     orl $0x03, %edx
     movl %edx, (%edi)
 
     jmp 2f
 
 .possibly_readonly:
-    cmpl $V2P(_kernel_readonly_end), %esi
+    cmpl $_kernel_readonly_end_paddr, %esi
     jge .not_readonly
 
     movl %esi, %edx
+    /* present */
     orl $0x01, %edx
     movl %edx, (%edi)
 
 2:
     addl $PAGE_SIZE, %esi
+    /* page table entry size: 8 */
     addl $8, %edi
     loop 1b
 
 3:
     call verify_kernel_mapping
 
-    /*
-     * 0x200000 >> 21 & 0x01FF: 1
-     * (0xFFFFFF8000000000 + 2MiB) >> 21 & 0x01FF: 1
-     */
+    /* identity map kernel */
     leal V2P(boot_pt1), %eax
     orl $0x03, %eax
 	movl %eax, V2P(boot_pd) + 1 * 8
 
-    /*
-     * 0x200000 >> 30 & 0x01FF: 0
-     * (0xFFFFFF8000000000 + 2MiB) >> 30 & 0x01FF: 0
-     */
     leal V2P(boot_pd), %eax
     orl $0x03, %eax
     movl %eax, V2P(boot_pdpt)
 
-    /*
-     * 0x200000 >> 39 & 0x01FF: 0
-     * (0xFFFFFF8000000000 + 2MiB) >> 39 & 0x01FF: 511
-     */
     leal V2P(boot_pdpt), %eax
     orl $0x03, %eax
     movl %eax, V2P(boot_pml4)
+
+    /* map to higher half */
     movl %eax, V2P(boot_pml4) + 511 * 8
 
-    /* Doing recursive mapping at entry 510 since the kernel is mapped at 511 */
+    /* doing recursive mapping at entry 510 since the kernel is mapped at 511 */
     leal V2P(boot_pml4), %eax
     orl $0x03, %eax
     movl %eax, V2P(boot_pml4) + 510 * 8
@@ -103,9 +91,8 @@ verify_kernel_mapping:
     ret
 
 .possibly_not_fully_mapped:
-    cmpl $V2P(_kernel_end), %esi
+    cmpl $_kernel_end_paddr, %esi
     jge .fully_mapped
 
     leal V2P(err_not_fully_mapped), %esi
     jmp critical_boot_err
-

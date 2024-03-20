@@ -5,8 +5,10 @@ KERNEL_VMA_OFFSET = 0xFFFFFF8000000000;
 SECTIONS {
     . = 2M;
 
-    _kernel_start = .;
-    _kernel_readonly_start = .;
+    _kernel_start_paddr = .;
+    _kernel_start_vaddr = . + KERNEL_VMA_OFFSET;
+    _kernel_readonly_start_paddr = .;
+    _kernel_readonly_start_vaddr = . + KERNEL_VMA_OFFSET;
 
     .multiboot2.data : {
         KEEP(*(.multiboot2.data))
@@ -26,7 +28,9 @@ SECTIONS {
         *(.rodata)
     }
 
-    _kernel_readonly_end = .;
+
+    _kernel_readonly_end_paddr = . - KERNEL_VMA_OFFSET;
+    _kernel_readonly_end_vaddr = .;
 
     .data ALIGN(4K) : AT(ADDR(.data) - KERNEL_VMA_OFFSET) {
         *(.data)
@@ -42,5 +46,6 @@ SECTIONS {
      * page where the kernel is mapped 
      */
     . = ALIGN(4K);
-    _kernel_end = .;
+    _kernel_end_paddr = . - KERNEL_VMA_OFFSET;
+    _kernel_end_vaddr = .;
 }

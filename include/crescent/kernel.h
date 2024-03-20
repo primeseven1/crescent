@@ -13,7 +13,11 @@
 #define EBUSY 4
 #define EADDRNOTAVAIL 5
 
-extern const u8 _kernel_start;
-extern const u8 _kernel_readonly_start;
-extern const u8 _kernel_readonly_end;
-extern const u8 _kernel_end;
+extern const u8 _kernel_start_paddr;
+extern const u8 _kernel_start_vaddr;
+extern const u8 _kernel_readonly_start_paddr;
+extern const u8 _kernel_readonly_start_vaddr;
+extern const u8 _kernel_readonly_end_paddr;
+extern const u8 _kernel_readonly_end_vaddr;
+extern const u8 _kernel_end_paddr;
+extern const u8 _kernel_end_vaddr;
