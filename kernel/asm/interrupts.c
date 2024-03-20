@@ -1,6 +1,6 @@
 #include <crescent/asm/segment.h>
 #include <crescent/panic.h>
-#include "crescent/types.h"
+#include <crescent/types.h>
 #include "isr.h"
 
 enum idt_flags {
@@ -23,6 +23,7 @@ struct idt_entry {
     u32 reserved; /* Set to 0 */
 } __attribute__((packed));
 
+__attribute__((aligned(16)))
 static struct idt_entry idt_entries[256] = { 0 };
 
 static void (*exception_handlers[32])(void) = {
@@ -32,22 +33,43 @@ static void (*exception_handlers[32])(void) = {
     _isr_30, _isr_31
 };
 
-static void write_idt_entry(struct idt_entry* entry, void (*handler)(void), u16 cs, u8 ist, u8 attributes)
+static void write_idt_entry(unsigned int index, void (*handler)(void), u16 cs, u8 ist, u8 attributes)
 {
-    entry->handler_low = (uintptr_t)handler & 0xFFFF;
-    entry->cs = cs;
-    entry->ist = ist;
-    entry->attributes = attributes;
-    entry->handler_mid = (uintptr_t)handler >> 16 & 0xFFFF;
-    entry->handler_high = (uintptr_t)handler >> 32;
-    entry->reserved = 0;
+    /* Critical programming error, so just panic now to avoid issues later */
+    if (unlikely(index >= ARRAY_SIZE(idt_entries)))
+        panic("Invalid IDT entry index! index: %u", index);
+
+    idt_entries[index].handler_low = (uintptr_t)handler & 0xFFFF;
+    idt_entries[index].cs = cs;
+    idt_entries[index].ist = ist;
+    idt_entries[index].attributes = attributes;
+    idt_entries[index].handler_mid = (uintptr_t)handler >> 16 & 0xFFFF;
+    idt_entries[index].handler_high = (uintptr_t)handler >> 32;
+    idt_entries[index].reserved = 0;
 }
 
 void do_idt_init(void)
 {
-    for (size_t i = 0; i < ARRAY_SIZE(exception_handlers); i++)
-        write_idt_entry(&idt_entries[i], exception_handlers[i], GDT_SEGMENT_KERNEL_CODE, 1,
-            IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_DPL0 | IDT_ATTRIBUTE_TRAP);
+    for (size_t i = 0; i < ARRAY_SIZE(exception_handlers); i++) {
+        switch (i) {
+        case IDT_EXCEPTION_MACHINE_CHECK:
+            write_idt_entry(i, exception_handlers[i], GDT_SEGMENT_KERNEL_CODE, 1,
+                IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_DPL0 | IDT_ATTRIBUTE_INTERRUPT);
+            break;
+        case IDT_EXCEPTION_DOUBLE_FAULT:
+            write_idt_entry(i, exception_handlers[i], GDT_SEGMENT_KERNEL_CODE, 2,
+                IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_DPL0 | IDT_ATTRIBUTE_TRAP);
+            break;
+        case IDT_EXCEPTION_NMI:
+            write_idt_entry(i, exception_handlers[i], GDT_SEGMENT_KERNEL_CODE, 3,
+                IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_DPL0 | IDT_ATTRIBUTE_INTERRUPT);
+            break;
+        default:
+            write_idt_entry(i, exception_handlers[i], GDT_SEGMENT_KERNEL_CODE, 0, 
+                IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_DPL0 | IDT_ATTRIBUTE_TRAP);
+            break;
+        }
+    }
 }
 
 void do_idt_load(void)

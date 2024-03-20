@@ -43,19 +43,21 @@ isr_common:
     /* Pointer to the saved general purpose registers */
     movq %rsp, %rsi
 
-    /* 
-     * Save SSE/MMX/x87 context, add 8 to the subtraction to align RSP by 16 
-     * there is no GP exception when executing fxsave, 
-     * this does assume the stack itself is aligned
-     */
-    subq $(512 + 8), %rsp
+    /* Deterimine the amount of stack space to reserve, (512 + rbx) */
+    movq %rsp, %rbx
+    andq $15, %rbx
+    subq $512, %rsp
+    subq %rbx, %rsp
+
     fxsave (%rsp)
 
     call _do_isr
 
-    /* Restore SSE/MMX/x87 context */
     fxrstor (%rsp)
-    addq $(512 + 8), %rsp
+    
+    /* Now restore the stack pointer, and then add rbx for alignment */
+    addq $512, %rsp
+    addq %rbx, %rsp
    
     popq %rax
 	popq %rbx
