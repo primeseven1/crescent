@@ -12,12 +12,6 @@ kcs:
 kds:
     .word 0xFFFF, 0x0000
     .byte 0x00, 0x93, 0xC0, 0x00
-ucs:
-    .word 0xFFFF, 0x0000
-    .byte 0x00, 0xFB, 0xA0, 0x00
-uds:
-    .word 0xFFFF, 0x0000
-    .byte 0x00, 0xF3, 0xC0, 0x00
 gdt_end:
 
 gdtr:
@@ -25,8 +19,8 @@ gdtr:
     .quad gdt_start
 
 .section .early.text, "ax"
-.globl do_gdt_init
+.globl do_boot_gdt_init
 
-do_gdt_init:
+do_boot_gdt_init:
     lgdt V2P(gdtr)
     ret

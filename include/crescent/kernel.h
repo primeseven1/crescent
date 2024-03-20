@@ -5,6 +5,8 @@
 #define likely(c) __builtin_expect(!!(c), 1)
 #define unlikely(c) __builtin_expect(!!(c), 0)
 
+#define asmlinkage __attribute__((sysv_abi))
+
 #define E2BIG 1
 #define EINVAL 2
 #define ENOSYS 3

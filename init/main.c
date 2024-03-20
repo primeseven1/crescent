@@ -5,6 +5,8 @@
 #include <crescent/panic.h>
 #include <crescent/mmap.h>
 
+void do_bootstrap_processor_init(void);
+
 static void print_memory(void)
 {
     size_t total_mem = get_total_mmap_free_memory() / 0x100000;
@@ -29,11 +31,14 @@ static void print_memory(void)
         vid_mem[i] = mib[j] | 0x0E << 8;
 }
 
-_Noreturn void kernel_main(const struct multiboot_info* mbi_paddr)
+_Noreturn asmlinkage void kernel_main(const struct multiboot_info* mbi_paddr)
 {
     const struct multiboot_tag_locations* locations = get_mbi_tag_locations(mbi_paddr);
 
     store_mbi_mmap(locations->mmap);
+
+    do_bootstrap_processor_init();
+
     print_memory();
 
     while (1)

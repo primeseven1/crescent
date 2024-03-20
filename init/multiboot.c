@@ -61,6 +61,8 @@ const struct multiboot_tag_locations* get_mbi_tag_locations(const struct multibo
         tag = (struct multiboot_tag*)((u8*)tag + ((tag->size + 7) & ~7));
     }
 
+    if (!locations.mmap || !locations.acpi.rsdp)
+        panic("critical multiboot information missing!");
 
     return &locations;
 }

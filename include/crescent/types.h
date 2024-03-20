@@ -6,6 +6,7 @@
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 #define FIELD_SIZEOF(t, f) (sizeof(((t*)0)->f))
+#define OFFSETOF(t, f) ((size_t)&(((t*)0)->f))
 #define NULL ((void*)0)
 
 typedef int8_t i8;

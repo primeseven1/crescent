@@ -54,6 +54,9 @@ static unsigned int handle_multichar_fmt_l(const char* rest, va_list va, void (*
             kprint_format_ullong(va_arg(va, unsigned long long), 16, cb);
 
         return 2;
+    case 'x':
+        kprint_format_ullong(va_arg(va, unsigned long), 16, cb);
+        return 1;
     case 'f':
         kprint_format_double(va_arg(va, double), 5, cb);
         return 1;

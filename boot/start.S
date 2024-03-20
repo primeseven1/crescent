@@ -23,7 +23,7 @@ _start:
     call enable_sse_instructions
     call map_higher_half
     call enable_long_mode
-    call do_gdt_init
+    call do_boot_gdt_init
 
     popl %ebx
 
