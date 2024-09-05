@@ -1,0 +1,7 @@
+/TESTING
+
+*.o
+*.d
+
+/crescent-kernel
+/tools/sections/sections
