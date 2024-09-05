@@ -1,0 +1,17 @@
+#pragma once
+
+#define UCHAR_MAX ((unsigned char)~0u)
+#define CHAR_MAX ((char)(UCHAR_MAX >> 1))
+#define CHAR_MIN ((char)(-CHAR_MAX - 1))
+#define USHRT_MAX ((unsigned short)~0u)
+#define SHRT_MAX ((short)(USHRT_MAX >> 1))
+#define SHRT_MIN ((short)(-SHRT_MAX - 1))
+#define UINT_MAX ((unsigned int)~0u)
+#define INT_MAX ((int)(UINT_MAX >> 1))
+#define INT_MIN ((int)(-INT_MAX - 1))
+#define ULONG_MAX ((unsigned long)~0ul)
+#define LONG_MAX ((long)(ULONG_MAX >> 1))
+#define LONG_MIN ((long)(-LONG_MAX - 1))
+#define ULLONG_MAX ((unsigned long long)~0ull)
+#define LLONG_MAX ((long long)(ULLONG_MAX >> 1))
+#define LLONG_MIN ((long long)(-LLONG_MAX - 1))
