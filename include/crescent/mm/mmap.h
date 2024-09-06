@@ -29,7 +29,7 @@ void mmap_init(void);
  * @param ctx The virtual memory context to use
  * @param virtaddr The virtual address
  *
- * @return NULL if unmapped, otherwise it returns the physical address
+ * @return (void*)-1 if unmapped, otherwise it returns the physical address
  */
 void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr);
 

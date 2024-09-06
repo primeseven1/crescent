@@ -47,12 +47,12 @@ static inline bool is_physaddr_canonical(const void* addr) {
 
 void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr) {
     if (!is_virtaddr_canonical(virtaddr))
-        return NULL;
+        return (void*)-1;
 
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
-    void* ret = NULL;
+    void* ret = (void*)-1;
 
     unsigned long lock_flags;
     spinlock_lock_irq_save(&ctx->lock, &lock_flags);
@@ -161,7 +161,7 @@ int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long m
     } else if (!(pd[pd_i] & MMU_FLAG_PRESENT)) {
         unsigned long* table = alloc_table();
         if (!table) {
-            err = -ENOENT;
+            err = -ENOMEM;
             goto err;
         }
         pd[pd_i] = (uintptr_t)table | MMU_FLAG_PRESENT | MMU_FLAG_READ_WRITE;
