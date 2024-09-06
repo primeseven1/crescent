@@ -1,10 +1,11 @@
 #pragma once
 
 #include <crescent/asm/msr.h>
+#include <crescent/mm/mmap.h>
 
 struct cpu {
     struct cpu* self;
-    unsigned long* vmm_ctx;
+    struct vm_ctx vm_ctx;
 };
 
 /**

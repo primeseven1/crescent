@@ -5,6 +5,11 @@
 #define PAGE_ALIGN_4K(a) ((uintptr_t)(a) & ~(0x1000 - 1))
 #define PAGE_ALIGN_2M(a) ((uintptr_t)(a) & ~(0x200000 - 1))
 
+struct vm_ctx {
+    unsigned long* ctx;
+    spinlock_t lock;
+};
+
 enum mmu_flags {
     MMU_FLAG_PRESENT = (1 << 0),
     MMU_FLAG_READ_WRITE = (1 << 1),
@@ -20,10 +25,13 @@ void mmap_init(void);
 
 /**
  * @brief Get the physical address of a page
+ *
+ * @param ctx The virtual memory context to use
  * @param virtaddr The virtual address
+ *
  * @return NULL if unmapped, otherwise it returns the physical address
  */
-void* get_physaddr(const void* virtaddr);
+void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr);
 
 /**
  * @brief Map a page
@@ -31,6 +39,7 @@ void* get_physaddr(const void* virtaddr);
  * virtaddr and physaddr will be automatically aligned to 4K or 2M depending on if
  * MMU_FLAG_LARGE is in the flags
  *
+ * @param ctx The virtual memory context to use
  * @param virtaddr The virtual address to map
  * @param physaddr The physical address to map virtaddr to
  * @param mmu_flags The MMU permissions for the page
@@ -41,7 +50,7 @@ void* get_physaddr(const void* virtaddr);
  * @retval -ENOMEM Cannot allocate memory for page tables
  * @retval -EADDRINUSE Address is already mapped
  */
-int map_page(void* virtaddr, void* physaddr, unsigned long mmu_flags);
+int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long mmu_flags);
 
 /**
  * @brief Unmap a page
@@ -49,13 +58,14 @@ int map_page(void* virtaddr, void* physaddr, unsigned long mmu_flags);
  * virtaddr is automatically aligned to 4K or 2M depending on the MMU flags
  * for the page
  *
+ * @param ctx The virtual memory context to use
  * @param virtaddr The virtual address to unmap
  *
  * @retval 0 Success
  * @retval -EFAULT virtaddr is non-canonical
  * @retval -ENOENT Page table entry not present
  */
-int unmap_page(void* virtaddr);
+int unmap_page(struct vm_ctx* ctx, void* virtaddr);
 
 /**
  * @brief Flush the TLB for a single page

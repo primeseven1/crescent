@@ -13,10 +13,11 @@
 static struct cpu bsp_cpu;
 
 static void bsp_cpu_init(void) {
-    unsigned long* vmm_ctx;
-    __asm__("movq %%cr3, %0" : "=r"(vmm_ctx));
-    vmm_ctx = hhdm_virtual(vmm_ctx);
-    bsp_cpu.vmm_ctx = vmm_ctx;
+    unsigned long* vm_ctx;
+    __asm__("movq %%cr3, %0" : "=r"(vm_ctx));
+    vm_ctx = hhdm_virtual(vm_ctx);
+    bsp_cpu.vm_ctx.ctx = vm_ctx;
+    bsp_cpu.vm_ctx.lock = SPINLOCK_INITIALIZER;
     _cpu_set(&bsp_cpu);
 }
 
