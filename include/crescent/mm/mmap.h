@@ -24,7 +24,7 @@ enum mmu_flags {
 void mmap_init(void);
 
 /**
- * @brief Get the physical address of a page
+ * @brief Get the physical address a virtual address maps to
  *
  * @param ctx The virtual memory context to use
  * @param virtaddr The virtual address
@@ -34,7 +34,7 @@ void mmap_init(void);
 void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr);
 
 /**
- * @brief Map a page
+ * @brief Map a virtual address to a physical address
  *
  * virtaddr and physaddr will be automatically aligned to 4K or 2M depending on if
  * MMU_FLAG_LARGE is in the flags
@@ -53,7 +53,7 @@ void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr);
 int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long mmu_flags);
 
 /**
- * @brief Unmap a page
+ * @brief Unmap a virtual address
  *
  * virtaddr is automatically aligned to 4K or 2M depending on the MMU flags
  * for the page
