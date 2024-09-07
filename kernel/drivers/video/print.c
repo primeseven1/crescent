@@ -2,6 +2,7 @@
 #include <crescent/core/limine.h>
 #include <crescent/core/locking.h>
 #include <crescent/common.h>
+#include <crescent/lib/string.h>
 #include <crescent/lib/fonts.h>
 #include "video.h"
 
@@ -36,19 +37,19 @@ static void scroll_text(void) {
     void* addr = (u8*)framebuffer->addr + index;
     size_t count = framebuffer->width * framebuffer->height * (framebuffer->bpp / 8) -
                    (framebuffer->width * (framebuffer->bpp / 8) * font->height);
-    __builtin_memmove(framebuffer->addr, addr, count);
+    memmove(framebuffer->addr, addr, count);
 
     /* Now just clear the last row */
     index = ((framebuffer->height - font->height) * framebuffer->pitch);
     addr = (u8*)framebuffer->addr + index;
     count = framebuffer->width * (framebuffer->bpp / 8) * font->height;
-    __builtin_memset(addr, 0, count);
+    memset(addr, 0, count);
 }
 
 static unsigned int row_index = 0;
 static unsigned int column_index = 0;
 
-static bool handle_special_character(char c) {
+static bool handle_escape(char c) {
     switch (c) {
     case '\n':
         row_index = 0;
@@ -64,9 +65,36 @@ static bool handle_special_character(char c) {
         else if (row_index == 0 && column_index)
             row_index = max_row_index;
         return true;
+    case '\a':
+        return true;
     case '\r':
         row_index = 0;
         return true;
+    case '\v': {
+        column_index++;
+        if (column_index > max_column_index) {
+            scroll_text();
+            column_index = max_column_index;
+        }
+        return true;
+    }
+    case '\t': {
+        const unsigned int tab_width = 8;
+        unsigned int next_tab_stop = (row_index / tab_width + 1) * tab_width;
+
+        row_index = next_tab_stop;
+        if (row_index > max_row_index) {
+            row_index = 0;
+            column_index++;
+
+            if (column_index > max_column_index) {
+                scroll_text();
+                column_index = max_column_index;
+            }
+        }
+
+        return true;
+    }
     }
 
     return false;
@@ -75,7 +103,7 @@ static bool handle_special_character(char c) {
 static void print_string(const char* str, int len, u8 red, u8 green, u8 blue) {
     while (len--) {
         if (*str < 32) {
-            bool handled = handle_special_character(*str);
+            bool handled = handle_escape(*str);
             if (handled) {
                 str++;
                 continue;
@@ -90,11 +118,11 @@ static void print_string(const char* str, int len, u8 red, u8 green, u8 blue) {
         if (row_index > max_row_index) {
             row_index = 0;
             column_index++;
-        }
 
-        if (column_index > max_column_index) {
-            scroll_text();
-            column_index = max_column_index;
+            if (column_index > max_column_index) {
+                scroll_text();
+                column_index = max_column_index;
+            }
         }
     }
 }
