@@ -1,5 +1,6 @@
 #include <crescent/common.h>
 #include <crescent/core/panic.h>
+#include <crescent/core/cpu.h>
 #include <crescent/core/locking.h>
 #include <crescent/core/printk.h>
 #include <crescent/core/ld_syms.h>
@@ -69,7 +70,7 @@ static void print_registers(void) {
 
 _Noreturn void panic(const char* fmt, ...) {
     static char buf[512];
-    static spinlock_t lock;
+    static spinlock_t lock = SPINLOCK_INITIALIZER;
 
     /* Unlikely that 2 threads will call panic at the same time, but it could happen */
     __asm__ volatile("cli" : : : "memory");
@@ -79,10 +80,10 @@ _Noreturn void panic(const char* fmt, ...) {
     va_start(va, fmt);
 
     vsnprintf(buf, sizeof(buf), fmt, va);
-    printk("\n[ Kernel panic - %s ]\n", buf);
+    printk("\n[ Kernel panic (processor %u) - %s ]\n", _cpu()->processor_id, buf);
     print_registers();
     print_stack_trace();
-    printk("[ End kernel panic - %s ]\n", buf);
+    printk("[ End kernel panic (processor %u) - %s ]\n", _cpu()->processor_id, buf);
 
     va_end(va);
     while (1)

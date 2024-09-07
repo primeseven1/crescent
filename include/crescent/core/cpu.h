@@ -6,6 +6,7 @@
 struct cpu {
     struct cpu* self;
     struct vm_ctx vm_ctx;
+    u32 processor_id;
 };
 
 /**

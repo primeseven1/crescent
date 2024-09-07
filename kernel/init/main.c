@@ -19,6 +19,19 @@ static void bsp_cpu_init(void) {
     vm_ctx = hhdm_virtual(vm_ctx);
     bsp_cpu.vm_ctx.ctx = vm_ctx;
     bsp_cpu.vm_ctx.lock = SPINLOCK_INITIALIZER;
+
+    struct limine_smp_response* smp_response = g_limine_smp_request.response;
+    if (smp_response) {
+        for (u64 i = 0; i < smp_response->cpu_count; i++) {
+            if (smp_response->cpus[i]->lapic_id != smp_response->bsp_lapic_id) {
+                bsp_cpu.processor_id = smp_response->cpus[i]->processor_id;
+                break;
+            }
+        }
+    } else {
+        bsp_cpu.processor_id = 0;
+    }
+
     _cpu_set(&bsp_cpu);
 }
 
