@@ -1,6 +1,7 @@
 #include <crescent/common.h>
 #include <crescent/core/printk.h>
 #include <crescent/core/locking.h>
+#include <crescent/core/debug/e9.h>
 #include <crescent/lib/kxtostr.h>
 #include <crescent/lib/string.h>
 
@@ -201,6 +202,9 @@ int vprintk(const char* fmt, va_list va) {
     int len = vsnprintf(printk_buf, sizeof(printk_buf), fmt, va);
     if (len > 0)
         printk_hook(printk_buf, len);
+#ifdef CONFIG_E9_ENABLE
+    debug_e9_write_str(printk_buf, len);
+#endif /* CONFIG_E9_ENABLE */
     spinlock_unlock_irq_restore(&lock, &flags);
     return len;
 }

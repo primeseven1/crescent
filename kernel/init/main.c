@@ -9,6 +9,7 @@
 #include <crescent/mm/zone.h>
 #include <crescent/mm/mmap.h>
 #include <crescent/mm/hhdm.h>
+#include <crescent/drivers/video/video.h>
 
 static struct cpu bsp_cpu;
 
@@ -24,10 +25,10 @@ static void bsp_cpu_init(void) {
 _Noreturn void kernel_main(void);
 _Noreturn void kernel_main(void) {
     bsp_cpu_init();
-#ifdef CONFIG_E9_ENABLE
-    printk_set_hook(debug_e9_write_str);
-#endif /* CONFIG_E9_ENABLE */
-    int err = tracing_init();
+    int err = driver_video_init();
+    if (!err)
+        printk_set_hook(driver_video_printk);
+    err = tracing_init();
     if (err)
         printk("tracing_init() failed with code %i!\n", err);
 
