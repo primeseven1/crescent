@@ -2,7 +2,7 @@
 
 set -e
 
-install_cross_compiler_dependencies() {
+install_gcc_dependencies() {
     if command -v pacman &>/dev/null; then
         sudo pacman -Syu
         sudo pacman -S base-devel gmp libmpc mpfr
@@ -19,17 +19,18 @@ install_cross_compiler_dependencies() {
         sudo emerge --sync
         sudo emerge --ask dev-build/make sys-devel/bison sys-devel/flex dev-libs/gmp dev-libs/mpfr sys-apps/texinfo
     else
-        echo "Error: cannot install cross compiler dependencies, package manager unknown. Please install the dependencies yourself."
-        echo "Dependencies: C/C++ compiler and linker, bison, gmp, mpc, mpfr, flex, texinfo"
-        echo "Remember to comment out the line that calls this function"
+        echo "Error: cannot install gcc dependencies, package manager unknown. Please install the dependencies yourself."
+        echo "Dependencies: C/C++ compiler and linker, bison, gmp, mpc, mpfr, flex, texinfo."
+        echo "Remember to comment out the line that calls this function, otherwise you will get the same error."
         exit 1
     fi
 
-    # Sudo shouldn't be needed anymore, so invalidate the sudo cached credentials
+    # Sudo should not be needed anymore, except when installed to a protected folder.
+    # This will just invalidate any previously cached credentials
     sudo -k
 }
 
-build_cross_compiler() {
+build_gcc() {
     local GCC_VERSION="$1"
     local BINUTILS_VERSION="$2"
     local TARGET="$3"
@@ -58,7 +59,7 @@ build_cross_compiler() {
 
     cd ..
 
-    # Configure, build, and install gcc
+    # Configure, build, and install gcc and libgcc
     mkdir -p gcc-build
     cd gcc-build
     ../gcc-$GCC_VERSION/configure --target="$TARGET" --prefix="$PREFIX" --program-prefix="$PROGRAM_PREFIX" --disable-nls --enable-languages=c,c++ --without-headers
@@ -79,5 +80,9 @@ build_cross_compiler() {
     echo "Cross-compiler for $TARGET built successfully!"
 }
 
-install_cross_compiler_dependencies # Feel free to comment this line out if you have dependencies installed already
-build_cross_compiler "14.1.0" "2.42" "x86_64-elf" "$HOME/.toolchains/gcc/x86_64-crescent" "-mno-red-zone -O2" "-j8" "x86_64-crescent-"
+install_gcc_dependencies # Feel free to comment this line out if you have dependencies installed already
+
+# Feel free to change these options: 
+# gcc version (1), binutils version (2), install prefix (4), make flags (6)
+# Make sure to make a copy of this script before making any changes
+build_gcc "14.1.0" "2.42" "x86_64-elf" "$HOME/.toolchains/gcc/x86_64-crescent" "-mno-red-zone -O2" "-j2" "x86_64-crescent-"
