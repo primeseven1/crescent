@@ -1,10 +1,12 @@
 #include <crescent/common.h>
+#include <crescent/core/cpu.h>
 #include <crescent/core/panic.h>
 #include <crescent/core/printk.h>
 #include <crescent/core/int/isr.h>
 #include <crescent/lib/string.h>
 #include <crescent/asm/flags.h>
 #include <crescent/asm/errno.h>
+#include "i8259.h"
 
 static const char* exception_messages[31] = {
     "Divide error",
@@ -44,18 +46,38 @@ static void (*isr_handlers[256])(const struct ctx* ctx);
 
 void _do_isr(const struct ctx* ctx);
 void _do_isr(const struct ctx* ctx) {
-    if (isr_handlers[ctx->int_num]) {
-        isr_handlers[ctx->int_num](ctx);
+    if (ctx->int_num < 32) {
+        if (isr_handlers[ctx->int_num])
+            isr_handlers[ctx->int_num](ctx);
+        else
+            panic("A CPU execption occurred (%lu, %s), but no handler is available to handle it\n", 
+                    ctx->int_num, exception_messages[ctx->int_num]);
         return;
     }
 
-    if (ctx->int_num < 32)
-        panic("A CPU execption occurred (%lu, %s), but no handler is available to handle it", 
-                ctx->int_num, exception_messages[ctx->int_num]);
+    if (ctx->int_num < 48) {
+        u8 irq = ctx->int_num - 32;
+        if (i8259_is_irq_spurious(irq)) {
+            i8259_handle_spurious_irq(irq);
+            printk("Spurious IRQ from the i8259 PIC on CPU %u\n", _cpu()->processor_id);
+        } else {
+            if (isr_handlers[ctx->int_num])
+                isr_handlers[ctx->int_num](ctx);
+            else
+                printk("Interrupt %lu recived on CPU %u, but there is no handler to handle it\n", 
+                        ctx->int_num, _cpu()->processor_id);
 
-    printk("A CPU interrupt occured (%lu), but there is no handler for it", ctx->int_num);
+            i8259_send_eoi(irq);
+        }
+
+        return;
+    }
+
+    printk("A CPU interrupt occured (%lu) on cpu %u, but there is no handler for it\n",
+            ctx->int_num, _cpu()->processor_id);
 }
 
 void isr_init(void) {
     memset(isr_handlers, 0, sizeof(isr_handlers));
+    i8259_init();
 }
