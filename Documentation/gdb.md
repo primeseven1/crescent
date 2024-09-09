@@ -1,10 +1,12 @@
 GDB
 ===
-- First you need to have to have the tools installed. You can do this by running this command: make tools
-- Then you need to run the scripts/run.py script with the --debug option.
-- Run the gdb command within project root. Not doing so will cause problems.
-- Now you need to run these commands in GDB:
-* source scripts/run.py
-* python load()
-* target remote localhost:1234
-- After running those commands, you can set breakpoints, or do whatever you need to do, and then run this gdb command: continue
+- First you need to have to have the kernel's tools built (run `make tools` in project root to build them)
+- Now you will need to open up a separate terminal, and cd into the scripts folder
+- Then in that separate terminal, run `./run.py --debug`
+- Now in your previous terminal, make sure you are in the project root directory. If not, you **will** have issues later on.
+- Execute `gdb` in that terminal
+- Now in gdb, execute this command: `source scripts/run.py`
+- Then execute this command: `python load()`
+- After that, you'll need to execute this command: `target remote localhost:1234`
+- Then you'll want to set up any breakpoints you want in gdb, and when you are ready, execute this command:`continue`
+- Select the boot option that says `no KASLR`, as not selecting it will result in addresses being randomized (which you don't want in this case)

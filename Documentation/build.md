@@ -1,47 +1,44 @@
-Windows
-=======
-- Install WSL2
-
-MacOS
-=====
-- I have no idea, good luck
-
-Linux
-=====
-- Continue
-
-Kernel
-======
-GCC
----
-- You need the toolchain. In order to build the toolchain, you will need to use the build script in scripts/gcc.sh. This script will build the toolchain for you. If you want to modify the script in any way, make sure you make a copy of it first, make whatever changes you need, and then run that script
-- Then you can build the project by running this command: make kernel
-
-Clang
------
-- Clang is not guarunteed to work. But nevertheless, there is a clang configuration
-- All you have to do is build the project with this command in project root: make kernel CONFIG_LLVM=yes.
-- You will need the LLVM linker as well (ld.lld), which is not installed on some systems even if you install clang
-
-ISO
-===
-- First, there is another script (scripts/run.py). You need to execute this script with the --setup command line argument (./scripts/run.py --setup), and then it will set up the enviroment for building and running the ISO
-- Then follow the build instructions for the kernel
-- Then you will need to run this command in project root: make iso
-- After that, the ISO will be built in TESTING/crescent.iso
-
-Tools
-=====
-- First, you need to have a C compiler installed
-- Then run this command in project root: make tools
-
 Configurations
 ==============
-- CONFIG_LLVM Uses clang instead of gcc
-- CONFIG_DEBUG Enables debug mode, disables all optimizations and enables debugging symbols
-- CONFIG_OPTIMIZATION Only applies if CONFIG_DEBUG is off. Affects the compiler optimization option (valid options: 0, 1, 2, 3, fast)
-- CONFIG_E9_ENABLE Enables port E9 debugging (only enable for hypervisors that support it)
+CONFIG_DEBUG: Enables debugging symbols and disables optimizations.
+CONFIG_OPTIMIZATION: Set the optimization level. Only valid when CONFIG_DEBUG is not enabled. Valid options: 0, 1, 2, 3, s, z, fast
+CONFIG_E9_ENABLE: Enables outputting printk output to port E9. Useful for debugging.
+CONFIG_LLVM: Use LLVM's tools over GNU's tools for compiling the kernel. Requires clang and lld to be installed on the system. (Note: this is not fully supported)
 
-Notes
-=====
-- You can build everything by entering this command: make all
+Building
+========
+Operating Systems
+-----------------
+Windows:
+- Install WSL2 (https://learn.microsoft.com/en-us/windows/wsl/install)
+- Continue
+
+MacOS:
+- I have no idea, good luck
+
+Linux:
+- Continue
+
+Compilers
+---------
+GCC:
+- First you must install a GCC cross compiler. There is a script for building the cross compiler at scripts/gcc.sh
+- Now read the script. Specifically the end of the script, and change any changes you need to make
+- Reccomendations:
+    * Check your gcc version (gcc --version) and binutils version (ld --version)
+    * Then set the compiler version to build to either the same or one version above the current version you have (or an even earlier version, if you want to do that for some reason)
+- Now run the script, the script may take a while to complete.
+- After the script finished, continue onto the next step.
+
+Clang:
+- Install clang and lld on your system, and then continue.
+
+Build
+-----
+- First, go to project root, and then follow the next steps
+- If you're using GCC run `make kernel`
+- If you're using clang, `run make kernel CONFIG_LLVM=yes`
+
+ISO
+---
+- If you want to build an ISO, read Documentation/running.md
