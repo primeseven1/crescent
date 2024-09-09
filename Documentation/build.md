@@ -1,9 +1,9 @@
 Configurations
 ==============
-CONFIG_DEBUG: Enables debugging symbols and disables optimizations.
-CONFIG_OPTIMIZATION: Set the optimization level. Only valid when CONFIG_DEBUG is not enabled. Valid options: 0, 1, 2, 3, s, z, fast
-CONFIG_E9_ENABLE: Enables outputting printk output to port E9. Useful for debugging.
-CONFIG_LLVM: Use LLVM's tools over GNU's tools for compiling the kernel. Requires clang and lld to be installed on the system. (Note: this is not fully supported)
+- CONFIG_DEBUG: Enables debugging symbols and disables optimizations.
+- CONFIG_OPTIMIZATION: Set the optimization level. Only valid when CONFIG_DEBUG is not enabled. Valid options: 0, 1, 2, 3, s, z, fast
+- CONFIG_E9_ENABLE: Enables outputting printk output to port E9. Useful for debugging.
+- CONFIG_LLVM: Use LLVM's tools over GNU's tools for compiling the kernel. Requires clang and lld to be installed on the system. (Note: this is not fully supported)
 
 Building
 ========
