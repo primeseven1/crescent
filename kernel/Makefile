@@ -1,7 +1,7 @@
 ASMFLAGS = -c -MMD -MP -D_ASSEMBLY_ \
 		   -I../include
 CFLAGS = -c -MMD -MP -std=c11 -I../include \
-		 -ffreestanding -fno-stack-protector \
+		 -ffreestanding -fno-stack-protector -fwrapv \
 		 -fno-omit-frame-pointer -fno-lto -fPIE \
 		 -Wall -Wextra -Wshadow -Wpointer-arith \
 		 -Wstrict-prototypes -Wmissing-prototypes \

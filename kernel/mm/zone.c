@@ -411,7 +411,7 @@ void* alloc_pages(unsigned int gfp_flags, unsigned int order) {
 void free_pages(void* addr, unsigned int order) {
     struct zone* zone = get_zone_from_addr(addr);
     if (!zone) {
-        printk("ERROR: free_pages failed to get the zone type!\n");
+        printk("ERROR: free_pages failed to get the zone type! (%p)\n", addr);
         return;
     }
 

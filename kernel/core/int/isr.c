@@ -50,7 +50,7 @@ void _do_isr(const struct ctx* ctx) {
         if (isr_handlers[ctx->int_num])
             isr_handlers[ctx->int_num](ctx);
         else
-            panic("A CPU execption occurred (%lu, %s), but no handler is available to handle it\n", 
+            panic("A CPU execption occurred (%lu, %s), but no handler is available to handle it", 
                     ctx->int_num, exception_messages[ctx->int_num]);
         return;
     }

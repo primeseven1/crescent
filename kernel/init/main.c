@@ -1,3 +1,4 @@
+#include <crescent/common.h>
 #include <crescent/core/printk.h>
 #include <crescent/core/panic.h>
 #include <crescent/core/cpu.h>
@@ -32,6 +33,9 @@ static void bsp_cpu_init(void) {
     } else {
         bsp_cpu.processor_id = 0;
     }
+
+    bsp_cpu.private_vm_zones.zones = NULL;
+    bsp_cpu.private_vm_zones.zone_count = 0;
 
     _cpu_set(&bsp_cpu);
 }

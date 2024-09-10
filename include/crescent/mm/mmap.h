@@ -17,6 +17,7 @@ enum mmu_flags {
     MMU_FLAG_WRITE_THROUGH = (1 << 3),
     MMU_FLAG_CACHE_DISABLE = (1 << 4),
     MMU_FLAG_ACCESSED = (1 << 5),
+    MMU_FLAG_VM_ZONE_ALLOC = (1 << 6),
     MMU_FLAG_LARGE = (1 << 7),
     MMU_FLAG_NX = (1ul << 63)
 };

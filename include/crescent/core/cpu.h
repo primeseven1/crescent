@@ -2,10 +2,15 @@
 
 #include <crescent/asm/msr.h>
 #include <crescent/mm/mmap.h>
+#include <crescent/mm/vm_zone.h>
 
 struct cpu {
     struct cpu* self;
     struct vm_ctx vm_ctx;
+    struct {
+        struct vm_zone** zones;
+        unsigned long zone_count;
+    } private_vm_zones;
     u32 processor_id;
 };
 
