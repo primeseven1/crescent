@@ -8,12 +8,19 @@ CONFIG_E9_ENABLE ?= no
 KERNEL_CONFIGS = CONFIG_LLVM=$(CONFIG_LLVM) CONFIG_DEBUG=$(CONFIG_DEBUG) CONFIG_OPTIMIZATION=$(CONFIG_OPTIMIZATION) \
 				 CONFIG_E9_ENABLE=$(CONFIG_E9_ENABLE)
 
+KERNEL_CONFIGS_FILE = ./configs.mk
+-include $(KERNEL_CONFIGS_FILE)
+
 .PHONY: kernel tools iso clean
+
 
 all: iso tools
 
-kernel:
+kernel: $(KERNEL_CONFIGS_FILE)
 	make -C kernel all $(KERNEL_CONFIGS)
+
+$(KERNEL_CONFIGS_FILE):
+	@echo "KERNEL_CONFIGS = $(KERNEL_CONFIGS)" > $(KERNEL_CONFIGS_FILE)
 
 tools:
 	make -C tools all
@@ -28,3 +35,4 @@ iso: kernel
 clean:
 	make -C kernel clean
 	make -C tools clean
+	rm -f $(KERNEL_CONFIGS_FILE)

@@ -4,4 +4,5 @@
 *.d
 
 /crescent-kernel
+/configs.mk
 /tools/sections/sections
