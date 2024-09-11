@@ -1,8 +1,7 @@
 #pragma once
 
 #include <crescent/types.h>
-#include <crescent/core/locking.h>
-#include <crescent/mm/zone.h>
+#include <crescent/mm/gfp.h>
 
 void* alloc_pages_virtual(unsigned int gfp_flags, unsigned int order);
 

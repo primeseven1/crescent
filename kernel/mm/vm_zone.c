@@ -1,4 +1,6 @@
 #include <crescent/common.h>
+#include <crescent/asm/errno.h>
+#include <crescent/core/locking.h>
 #include <crescent/mm/vm_zone.h>
 
 #define MAX_TOP_LEVEL_4K_PAGES 0x1000000000
