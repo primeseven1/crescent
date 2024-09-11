@@ -33,8 +33,8 @@
     .text; \
     .globl _isr_##n; \
     _isr_##n: \
-        swapgs_if_needed; \
         pushq $0; \
+        swapgs_if_needed; \
         pushq $n; \
         call isr_common; \
         addq $16, %rsp; \
@@ -60,8 +60,8 @@
     .text; \
     .globl _isr_##n; \
     _isr_##n: \
-        swapgs_if_needed_msr; \
         pushq $0; \
+        swapgs_if_needed_msr; \
         pushq $n; \
         call isr_common; \
         addq $16, %rsp; \
