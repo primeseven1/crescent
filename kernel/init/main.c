@@ -34,9 +34,6 @@ static void bsp_cpu_init(void) {
         bsp_cpu.processor_id = 0;
     }
 
-    bsp_cpu.private_vm_zones.zones = NULL;
-    bsp_cpu.private_vm_zones.zone_count = 0;
-
     _cpu_set(&bsp_cpu);
 }
 
