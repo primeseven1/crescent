@@ -19,15 +19,13 @@
     pushq %rdx; \
     movl $MSR_GS_BASE, %ecx; \
     rdmsr; \
-    shlq $32, %rdx; \
-    movl %eax, %eax; \
-    orq %rax, %rdx; \
-    jne 1f; \
-    swapgs; \
+    testl %edx, %edx \
+    js 1f \
+    swapgs \
     1: \
     popq %rdx; \
     popq %rcx; \
-    popq %rdx;
+    popq %rax;
 
 #define isr_no_err(n) \
     .text; \
