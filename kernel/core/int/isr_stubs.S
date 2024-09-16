@@ -19,9 +19,9 @@
     pushq %rdx; \
     movl $MSR_GS_BASE, %ecx; \
     rdmsr; \
-    testl %edx, %edx \
-    js 1f \
-    swapgs \
+    testl %edx, %edx; \
+    js 1f; \
+    swapgs; \
     1: \
     popq %rdx; \
     popq %rcx; \
