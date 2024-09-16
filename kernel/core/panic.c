@@ -5,6 +5,7 @@
 #include <crescent/core/printk.h>
 #include <crescent/core/ld_syms.h>
 #include <crescent/core/debug/trace.h>
+#include <crescent/core/int/irq.h>
 #include <crescent/asm/flags.h>
 #include <crescent/asm/msr.h>
 
@@ -73,7 +74,7 @@ _Noreturn void panic(const char* fmt, ...) {
     static spinlock_t lock = SPINLOCK_INITIALIZER;
 
     /* Unlikely that 2 threads will call panic at the same time, but it could happen */
-    __asm__ volatile("cli" : : : "memory");
+    local_irq_disable();
     spinlock_lock(&lock);
 
     va_list va;
