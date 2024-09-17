@@ -26,3 +26,10 @@ static inline struct cpu* _cpu(void) {
     __asm__("movq %%gs:0, %0" : "=r"(ret));
     return ret;
 }
+
+/**
+ * @brief Execute the swapgs CPU instruction
+ */
+static inline void swapgs(void) {
+    __asm__ volatile("swapgs" : : : "memory");
+}

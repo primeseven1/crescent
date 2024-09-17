@@ -69,22 +69,54 @@ static void print_registers(void) {
             rsp, rbp, cr0, cr2, cr3, cr4, fs, gs, krnlgs, cs, ds, es, rflags);
 }
 
+static inline void idt_load_null(void) {
+    struct {
+        u16 limit;
+        void* idt_ptr;
+    } __attribute__((packed)) idtr = {
+        .limit = 0,
+        .idt_ptr = NULL
+    };
+
+    __asm__ volatile("lidt %0" : : "m"(idtr) : "memory");
+}
+
 _Noreturn void panic(const char* fmt, ...) {
     static char buf[512];
     static spinlock_t lock = SPINLOCK_INITIALIZER;
 
-    /* Unlikely that 2 threads will call panic at the same time, but it could happen */
+    /* 
+     * Since we are trying to panic, we obviously want no IRQ's happening.
+     * Also load the IDT with a limit of 0 so that if an NMI or another fault
+     * happens, the system just triple faults.
+     */
     local_irq_disable();
+    idt_load_null();
+
+    /* Unlikely that 2 threads will call panic at the same time, but it could happen */
     spinlock_lock(&lock);
 
     va_list va;
     va_start(va, fmt);
 
+    /* 
+     * I had an issue where a deadlock would happen because a page fault 
+     * would happen here since the gsbase register wasn't swapped correctly.
+     * This will correct that, and it will swapgs after getting the per-cpu data
+     * so it shows up in the register dump.
+     */
+    struct cpu* cpu = (struct cpu*)rdmsr(MSR_GS_BASE);
+    if (unlikely(!cpu)) {
+        swapgs();
+        cpu = _cpu();
+        swapgs();
+    }
+
     vsnprintf(buf, sizeof(buf), fmt, va);
-    printk("\n[ Kernel panic (processor %u) - %s ]\n", _cpu()->processor_id, buf);
+    printk("\n[ Kernel panic (processor %u) - %s ]\n", cpu->processor_id, buf);
     print_registers();
     print_stack_trace();
-    printk("[ End kernel panic (processor %u) - %s ]\n", _cpu()->processor_id, buf);
+    printk("[ End kernel panic (processor %u) - %s ]\n", cpu->processor_id, buf);
 
     va_end(va);
     while (1)
