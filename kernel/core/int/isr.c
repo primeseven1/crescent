@@ -47,12 +47,13 @@ static void (*isr_handlers[256])(const struct ctx* ctx);
 void _do_isr(const struct ctx* ctx);
 void _do_isr(const struct ctx* ctx) {
     if (ctx->int_num < 32) {
-        if (isr_handlers[ctx->int_num])
+        if (isr_handlers[ctx->int_num]) {
             isr_handlers[ctx->int_num](ctx);
-        else
-            panic("A CPU execption occurred (%lu, %s), but no handler is available to handle it", 
-                    ctx->int_num, exception_messages[ctx->int_num]);
-        return;
+            return;
+        }
+
+        panic("A CPU execption occurred (%lu, %s), but no handler is available to handle it", 
+                ctx->int_num, exception_messages[ctx->int_num]);
     }
 
     if (ctx->int_num < 48) {
@@ -60,16 +61,16 @@ void _do_isr(const struct ctx* ctx) {
         if (i8259_is_irq_spurious(irq)) {
             i8259_handle_spurious_irq(irq);
             printk("Spurious IRQ from the i8259 PIC on CPU %u\n", _cpu()->processor_id);
-        } else {
-            if (isr_handlers[ctx->int_num])
-                isr_handlers[ctx->int_num](ctx);
-            else
-                printk("Interrupt %lu recived on CPU %u, but there is no handler to handle it\n", 
-                        ctx->int_num, _cpu()->processor_id);
-
-            i8259_send_eoi(irq);
+            return;
         }
+        
+        if (isr_handlers[ctx->int_num])
+            isr_handlers[ctx->int_num](ctx);
+        else
+            printk("Interrupt %lu (irq %u) recived on CPU %u, but there is no handler to handle it\n",
+                    ctx->int_num, irq, _cpu()->processor_id);
 
+        i8259_send_eoi(irq);
         return;
     }
 
