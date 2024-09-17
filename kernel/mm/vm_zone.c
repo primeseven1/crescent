@@ -220,6 +220,7 @@ static struct vm_zone* create_vm_zone(unsigned long page_count, unsigned int gfp
         return NULL;
     }
     map = hhdm_virtual(map);
+    memset(map, 0, map_size);
 
     zone->area = area;
     zone->page_count = page_count;
@@ -228,9 +229,10 @@ static struct vm_zone* create_vm_zone(unsigned long page_count, unsigned int gfp
     zone->map = map;
     zone->lock = SPINLOCK_INITIALIZER;
 
+    struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     for (unsigned long i = 0; i < page_count; i++) {
         void* virtual = (u8*)zone->area->base + i * 0x1000;
-        if (get_physaddr(&_cpu()->vm_ctx, virtual) != (void*)-1)
+        if (get_physaddr(vm_ctx, virtual) != (void*)-1)
             _reserve_vpages(zone, virtual, 1);
     }
 
@@ -270,9 +272,10 @@ static int resize_vm_zone(struct vm_zone* zone, long page_count) {
     zone->map = new_map;
     zone->page_count = new_page_count;
 
+    struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     for (unsigned long i = old_page_count - 1; i < (unsigned long)new_page_count; i++) {
         void* virtual = (u8*)zone->area->base + i * 0x1000;
-        if (get_physaddr(&_cpu()->vm_ctx, virtual) != (void*)-1)
+        if (get_physaddr(vm_ctx, virtual) != (void*)-1)
             _reserve_vpages(zone, virtual, 1);
     }
 
@@ -366,7 +369,11 @@ static bool try_zone_shrink_or_destroy(struct vm_zone* zone, unsigned long zone_
                 return true;
             }
 
-            /* Hopefully this doesn't happen, since there isn't a good way to recover from this */
+            /* 
+             * Hopefully this doesn't happen, since there isn't a good way to 
+             * recover from this if the zone cannot be added back, chances are
+             * you'll run out of memory before this even happens.
+             */
             unsigned long index = add_vm_zone(zone);
             if (unlikely(index == ULONG_MAX)) {
                 printk("Failed to add vm_zone struct after a failed attempt at destoying\n");
@@ -415,6 +422,8 @@ void vm_zone_init(void) {
     if (!kernel_vm_zones)
         panic("Failed to allocate kernel vm zone list");
     kernel_vm_zones = hhdm_virtual(kernel_vm_zones);
+    for (size_t i = 0; i < KERNEL_VM_ZONE_COUNT; i++)
+        kernel_vm_zones[i] = 0;
 
     unsigned long* top_level_pt = _cpu()->vm_ctx.ctx;
     unsigned long top_level_index = 256;
