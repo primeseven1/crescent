@@ -18,6 +18,22 @@
 void* alloc_vpages(unsigned int gfp_flags, unsigned int order);
 
 /**
+ * @brief Reserve virtual pages
+ *
+ * If any error happens, no pages get reserved.
+ *
+ * @param addr The address to reserve
+ * @param order The power of two number of contiguous pages to allocate 
+ *              (eg. order 2 for 4 pages, order 1 for 2 pages, order 0 for 1 page) 
+ *
+ * @retval -EOVERFLOW The address + page_count is outside of the virtual memory zone
+ * @retval -EADDRNOTAVAIL No zone available for the allocation
+ * @retval -EADDRINUSE The address range that you want has all or some of the pages already allocated
+ * @retval 0 Success
+ */
+int reserve_vpages(void* addr, unsigned int order);
+
+/**
  * @brief Free virtual pages
  *
  * @param addr The address to free
