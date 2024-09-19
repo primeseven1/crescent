@@ -60,25 +60,26 @@ void _do_isr(const struct ctx* ctx) {
         u8 irq = ctx->int_num - 32;
         if (i8259_is_irq_spurious(irq)) {
             i8259_handle_spurious_irq(irq);
-            printk("Spurious IRQ from the i8259 PIC on CPU %u\n", _cpu()->processor_id);
+            printk(PL_WARN "Spurious IRQ from the i8259 PIC on CPU %u\n", _cpu()->processor_id);
             return;
         }
         
         if (isr_handlers[ctx->int_num])
             isr_handlers[ctx->int_num](ctx);
         else
-            printk("Interrupt %lu (irq %u) recived on CPU %u, but there is no handler to handle it\n",
+            printk(PL_CRIT "Interrupt %lu (irq %u) recived on CPU %u, but there is no handler to handle it\n",
                     ctx->int_num, irq, _cpu()->processor_id);
 
         i8259_send_eoi(irq);
         return;
     }
 
-    printk("A CPU interrupt occured (%lu) on cpu %u, but there is no handler for it\n",
+    printk(PL_CRIT "A CPU interrupt occured (%lu) on cpu %u, but there is no handler for it\n",
             ctx->int_num, _cpu()->processor_id);
 }
 
 void isr_init(void) {
     memset(isr_handlers, 0, sizeof(isr_handlers));
     i8259_init();
+    printk("Initialized ISR's\n");
 }

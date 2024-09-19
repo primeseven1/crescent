@@ -183,6 +183,14 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
 }
 
 static char printk_buf[2048];
+static const char* prefixes[] = {
+    [PL_NONE_N] = "",
+    [PL_EMERG_N] = "[EMERG] ",
+    [PL_CRIT_N] = "[CRIT] ",
+    [PL_ERR_N] = "[ERR] ",
+    [PL_WARN_N] = "[WARN] ",
+    [PL_INFO_N] = "[INFO] "
+};
 static spinlock_t lock = SPINLOCK_INITIALIZER;
 
 static void 
@@ -196,15 +204,50 @@ void printk_set_hook(void (*hook)(const char*, int)) {
     printk_hook = hook;
 }
 
+#ifdef CONFIG_DEBUG
+static int printk_level = PL_INFO_N;
+#else
+static int printk_level = PL_ERR_N;
+#endif
+
+int set_printk_level(int level) {
+    if (level > PL_DEFAULT_N)
+        return -E2BIG;
+
+    printk_level = level;
+    return 0;
+}
+
 int vprintk(const char* fmt, va_list va) {
+    int level;
+    if (fmt[0] == PL_BEGIN_N) {
+        if (__builtin_strlen(fmt) <= 2)
+            return -EOVERFLOW;
+        if (fmt[1] > PL_DEFAULT_N)
+            level = PL_DEFAULT_N;
+        else
+            level = fmt[1];
+        fmt += 2;
+    } else {
+        level = PL_DEFAULT_N;
+    }
+
+    const char* prefix = prefixes[level];
+    int prefix_len = strlen(prefix);
+
     unsigned long flags;
     spinlock_lock_irq_save(&lock, &flags);
     int len = vsnprintf(printk_buf, sizeof(printk_buf), fmt, va);
-    if (len > 0)
+    if (len > 0 && level <= printk_level) {
+        printk_hook(prefix, prefix_len);
         printk_hook(printk_buf, len);
+    }
+
 #ifdef CONFIG_E9_ENABLE
+    debug_e9_write_str(prefix, prefix_len);
     debug_e9_write_str(printk_buf, len);
 #endif /* CONFIG_E9_ENABLE */
+
     spinlock_unlock_irq_restore(&lock, &flags);
     return len;
 }

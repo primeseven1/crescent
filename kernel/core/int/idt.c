@@ -1,6 +1,7 @@
 #include <crescent/common.h>
 #include <crescent/asm/segment.h>
-#include <crescent/core/panic.h>
+#include <crescent/core/cpu.h>
+#include <crescent/core/printk.h>
 #include <crescent/core/int/idt.h>
 #include <crescent/lib/string.h>
 #include "isr.h"
@@ -78,4 +79,5 @@ void idt_init(void) {
     }
 
     idt_load();
+    printk("IDT loaded on processor %u\n", _cpu()->processor_id);
 }

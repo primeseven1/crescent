@@ -322,14 +322,14 @@ void* alloc_vpages(unsigned int gfp_flags, unsigned int order) {
         if (!zone) {
             zone = create_vm_zone(page_count, gfp_flags);
             if (!zone) {
-                printk("Failed to create a new memory zone\n");
+                printk(PL_ERR "Failed to create a new memory zone\n");
                 return NULL;
             }
 
             index = add_kernel_vm_zone(zone);
             if (unlikely(index == ULONG_MAX)) {
                 destroy_vm_zone(zone);
-                printk("Succesfully allocated a new virtual memory zone, but could not add it to the list.\n");
+                printk(PL_CRIT "Succesfully allocated a new kernel virtual memory zone, but could not add it to the list.\n");
                 return NULL;
             }
         }
@@ -388,7 +388,7 @@ static void try_shrink_zone(struct vm_zone* zone) {
 
     long s_zone_page_count = (long)zone->page_count;
     if (s_zone_page_count < 0) {
-        printk("Tried to shrink the virtual memory zone at base %p, but there was signed integer overflow\n",
+        printk(PL_ERR "Tried to shrink the virtual memory zone at base %p, but there was signed integer overflow\n",
                 zone->area->base);
         return;
     }
@@ -399,7 +399,7 @@ static void try_shrink_zone(struct vm_zone* zone) {
         printk("Resized virtual memory zone (base %p) by %li pages\n", 
                 zone->area->base, count);
     } else {
-        printk("Error when resizing memory zone (base %p) err: %i\n", 
+        printk(PL_ERR "Error when resizing memory zone (base %p) err: %i\n", 
                 zone->area->base, err);
     }
 }
@@ -408,7 +408,7 @@ void free_vpages(void* addr, unsigned int order) {
     unsigned long unused;
     struct vm_zone* zone = get_zone_from_addr(addr, &unused);
     if (!zone) {
-        printk("Failed to get virtual memory zone from address %p!\n", addr);
+        printk(PL_ERR "Failed to get virtual memory zone from address %p!\n", addr);
         return;
     }
 
@@ -459,4 +459,5 @@ void vm_zone_init(void) {
     if (!zone)
         panic("Failed to create the first virtual memory zone. This should not happen!");
     zone->area->locked = true;
+    printk("Initialized virtual memory zones\n");
 }

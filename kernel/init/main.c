@@ -45,7 +45,7 @@ _Noreturn void kernel_main(void) {
         printk_set_hook(driver_video_printk);
     err = tracing_init();
     if (err)
-        printk("tracing_init() failed with code %i!\n", err);
+        printk(PL_WARN "tracing_init() failed with code %i!\n", err);
 
     memory_zones_init();
     mmap_init();
@@ -54,7 +54,7 @@ _Noreturn void kernel_main(void) {
     isr_init();
     vm_zone_init();
 
-    printk("Successfully finished execution!\n");
+    printk(PL_CRIT "Successfully finished execution!\n");
     while (1)
         __asm__ volatile("hlt");
 }

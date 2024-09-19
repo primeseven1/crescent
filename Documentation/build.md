@@ -42,3 +42,9 @@ Build
 ISO
 ---
 - If you want to build an ISO, read Documentation/running.md
+
+Debugging
+=========
+- I usually start out with optimizations turned on with CONFIG_E9_ENABLE turned on. If there is a problem I cannot see, I then enable CONFIG_DEBUG and see if the same issue is there.
+- This is to catch bugs relating to optimizations. If this happens, then the code was not written properly (eg. forgetting a volatile for MMIO space).
+- If you want to use a debugger like GDB, see Documentation/gdb.md.

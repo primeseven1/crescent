@@ -1,6 +1,7 @@
 #include <crescent/common.h>
 #include <crescent/asm/cpuid.h>
 #include <crescent/asm/ctl.h>
+#include <crescent/core/printk.h>
 #include <crescent/core/cpu.h>
 #include <crescent/core/panic.h>
 #include <crescent/mm/mmap.h>
@@ -297,4 +298,6 @@ void mmap_init(void) {
     } else if (mode->mode != LIMINE_PAGING_MODE_4LVL) {
         panic("Wrong paging mode selected by the loader!");
     }
+
+    printk("Initialized virtual memory mapping\n");
 }

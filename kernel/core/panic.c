@@ -14,7 +14,7 @@ static void print_stack_trace(void) {
     void** stack_frame = __builtin_frame_address(0);
 
     size_t kernel_offset = (uintptr_t)&_lds_kernel_start - KERNEL_MIN_VIRTADDR;
-    printk("--- Stack trace (kernel offset: 0x%lx) --- \n", kernel_offset);
+    printk(PL_EMERG "--- Stack trace (kernel offset: 0x%lx) --- \n", kernel_offset);
     for (int i = 0; i < 10; i++) {
         if (!stack_frame)
             break;
@@ -26,11 +26,11 @@ static void print_stack_trace(void) {
         if (name) {
             ssize_t offset = trace_kernel_symbol_offset(ret_addr);
             if (likely(offset != -1))
-                printk(" %p <%s+0x%lx>\n", ret_addr, name, (size_t)offset);
+                printk(PL_EMERG " %p <%s+0x%lx>\n", ret_addr, name, (size_t)offset);
             else
-                printk(" %p <%s+?>\n", ret_addr, name);
+                printk(PL_EMERG " %p <%s+?>\n", ret_addr, name);
         } else {
-            printk(" %p <?+?>\n", ret_addr);
+            printk(PL_EMERG " %p <?+?>\n", ret_addr);
         }
 
         stack_frame = stack_frame[0];
@@ -60,13 +60,13 @@ static void print_registers(void) {
             "movq %%es, %2\n\t"
             : "=r"(cs), "=r"(ds), "=r"(es)); 
     rflags = read_cpu_flags();
-    printk("--- Registers ---\n"
-            " RSP: 0x%lx, RBP: 0x%lx\n"
-            " CR0: 0x%lx, CR2: 0x%lx, CR3: 0x%lx, CR4: 0x%lx\n"
-            " FS: 0x%lx, GS: 0x%lx, KRNLGS: 0x%lx\n"
-            " CS: 0x%lx, DS: 0x%lx, ES: 0x%lx\n"
-            " RFLAGS: 0x%lx\n",
-            rsp, rbp, cr0, cr2, cr3, cr4, fs, gs, krnlgs, cs, ds, es, rflags);
+
+    printk(PL_EMERG "--- Registers ---\n");
+    printk(PL_EMERG " RSP: 0x%lx, RBP: 0x%lx\n", rsp, rbp);
+    printk(PL_EMERG " CR0: 0x%lx, CR2: 0x%lx, CR3: 0x%lx, CR4: 0x%lx\n", cr0, cr2, cr3, cr4);
+    printk(PL_EMERG " FS: 0x%lx, GS: 0x%lx, KRNLGS: 0x%lx\n", fs, gs, krnlgs);
+    printk(PL_EMERG " CS: 0x%lx, DS: 0x%lx, ES: 0x%lx\n", cs, ds, es);
+    printk(PL_EMERG " RFLAGS: 0x%lx\n", rflags);
 }
 
 static inline void idt_load_null(void) {
@@ -113,10 +113,10 @@ _Noreturn void panic(const char* fmt, ...) {
     }
 
     vsnprintf(buf, sizeof(buf), fmt, va);
-    printk("\n[ Kernel panic (processor %u) - %s ]\n", cpu->processor_id, buf);
+    printk(PL_EMERG "----- [ Kernel panic (processor %u) - %s ] -----\n", cpu->processor_id, buf);
     print_registers();
     print_stack_trace();
-    printk("[ End kernel panic (processor %u) - %s ]\n", cpu->processor_id, buf);
+    printk(PL_EMERG "----- [ End kernel panic (processor %u) - %s ] -----\n", cpu->processor_id, buf);
 
     va_end(va);
     while (1)

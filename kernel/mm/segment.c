@@ -1,5 +1,7 @@
 #include <crescent/common.h>
+#include <crescent/core/cpu.h>
 #include <crescent/core/panic.h>
+#include <crescent/core/printk.h>
 #include <crescent/asm/segment.h>
 #include <crescent/lib/string.h>
 #include <crescent/mm/zone.h>
@@ -125,4 +127,6 @@ void segments_init(void) {
     gdt_load(segments);
     reload_segment_regs();
     tss_load();
+
+    printk("GDT Loaded on processor %u\n", _cpu()->processor_id);
 }

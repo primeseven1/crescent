@@ -411,13 +411,13 @@ void* alloc_pages(unsigned int gfp_flags, unsigned int order) {
 void free_pages(void* addr, unsigned int order) {
     struct zone* zone = get_zone_from_addr(addr);
     if (!zone) {
-        printk("ERROR: free_pages failed to get the zone type! (%p)\n", addr);
+        printk(PL_ERR "free_pages failed to get the zone type! (%p)\n", addr);
         return;
     }
 
     int err = _free_pages(zone, addr, order);
     if (err)
-        printk("ERROR: _free_pages failed to free pages from the memory zone! err: %i\n", err);
+        printk(PL_ERR "_free_pages failed to free pages from the memory zone! err: %i\n", err);
 }
 
 static void memory_zone_init(struct zone* zone, void* base, 
@@ -535,10 +535,14 @@ void memory_zones_init(void) {
     total_mem -= zone_size;
 
     zone_size = dma32_zone_init(base, total_mem);
-    if (zone_size == 0)
+    if (zone_size == 0) {
+        printk("Initialized physical memory zones\n");
         return;
+    }
+
     base += zone_size;
     total_mem -= zone_size;
 
     normal_zone_init(base, total_mem);
+    printk("Initialized physical memory zones\n");
 }
