@@ -8,6 +8,7 @@
 #include <crescent/core/int/irq.h>
 #include <crescent/asm/flags.h>
 #include <crescent/asm/msr.h>
+#include <crescent/lib/printf.h>
 
 __attribute__((noinline)) 
 static void print_stack_trace(void) {

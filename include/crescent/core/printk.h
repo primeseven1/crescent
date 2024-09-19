@@ -28,19 +28,6 @@
 #define PL_EMERG PL_BEGIN_S PL_EMERG_S
 #define PL_NONE PL_BEGIN_S PL_NONE_S
 
-
-/**
- * @brief Formats and stores a va_list into a buffer
- *
- * @param buf The buffer where the string will be stored
- * @param bufsize The size of the buffer
- * @param fmt The format string
- * @param va The variable argument list
- *
- * @return The number of characters written, negative if an error happened
- */
-int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va);
-
 /**
  * @brief Set a hook for the printk function
  *
