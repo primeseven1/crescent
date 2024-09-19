@@ -328,22 +328,24 @@ void* alloc_vpages(unsigned int gfp_flags, unsigned int order) {
         if (ret)
             goto out;
 
-        int err = resize_vm_zone(zone, page_count);
-        if (!err) {
+        while (1) {
+            int err = resize_vm_zone(zone, page_count);
+            if (err)
+                break;
+
             printk("Resized the virtual memory zone (base %p) by %lu pages\n", 
                     zone->area->base, page_count);
             ret = _alloc_vpages(zone, page_count);
             if (ret)
-                break;
-                
-            printk("Successfully resized the virtual memory zone (base %p), but somehow didn't get any pages. This is a bug.\n",
-                    zone->area->base);
-            ret = NULL;
-            goto out;
+                goto out;
         }
 
+        /* 
+         * Since the last code failed to get a free page, we need to create another 
+         * or find another memory zone at a different index 
+         */
+        index++;
         spinlock_unlock_irq_restore(&zone->lock, &zone_lock_flags);
-        zone = NULL;
     }
 
 out:
