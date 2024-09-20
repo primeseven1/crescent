@@ -9,11 +9,11 @@
 static char printk_buf[2048];
 static const char* prefixes[] = {
     [PL_NONE_N] = "",
-    [PL_EMERG_N] = "[EMERG] ",
-    [PL_CRIT_N] = "[CRIT] ",
-    [PL_ERR_N] = "[ERR] ",
-    [PL_WARN_N] = "[WARN] ",
-    [PL_INFO_N] = "[INFO] "
+    [PL_EMERG_N] = "\033[31m[EMERG]\033[0m ", /* red */
+    [PL_CRIT_N] = "\033[31m[CRIT]\033[0m ", /* red */
+    [PL_ERR_N] = "\033[31m[ERR]\033[0m ", /* red */
+    [PL_WARN_N] = "\033[33m[WARN]\033[0m ", /* yellow */
+    [PL_INFO_N] = "\033[37m[INFO]\033[0m " /* white */
 };
 static spinlock_t lock = SPINLOCK_INITIALIZER;
 

@@ -1,9 +1,10 @@
 #include <crescent/drivers/video/video.h>
+#include <crescent/common.h>
 #include <crescent/core/limine.h>
 #include <crescent/core/locking.h>
-#include <crescent/common.h>
 #include <crescent/lib/string.h>
 #include <crescent/lib/fonts.h>
+#include <crescent/lib/kstrtox.h>
 #include "video.h"
 
 static unsigned int max_row_index;
@@ -100,17 +101,78 @@ static bool handle_escape(char c) {
     return false;
 }
 
-static void print_string(const char* str, int len, u8 red, u8 green, u8 blue) {
-    while (len--) {
-        if (*str < 32) {
+struct color_info {
+    u8 red;
+    u8 green;
+    u8 blue;
+};
+
+static struct color_info color_info[8] = {
+    { .red = 0x00, .green = 0x00, .blue = 0x00 }, /* black */
+    { .red = 0x80, .green = 0x00, .blue = 0x00 }, /* red */
+    { .red = 0x00, .green = 0x80, .blue = 0x00 }, /* green */
+    { .red = 0x80, .green = 0x80, .blue = 0x00 }, /* yellow */
+    { .red = 0x00, .green = 0x00, .blue = 0x80 }, /* blue */
+    { .red = 0x80, .green = 0x00, .blue = 0x80 }, /* magenta */
+    { .red = 0x00, .green = 0x80, .blue = 0x80 }, /* cyan */
+    { .red = 0xFF, .green = 0xFF, .blue = 0xFF } /* white */
+};
+static struct color_info default_color = {
+    .red = 0xcc, .green = 0xcc, .blue = 0xcc
+};
+
+static struct color_info* current = &default_color;
+
+/* Returns the amount of characters that should be added to skip the escape sequence, returns -1 on error */
+static ssize_t change_ansi_color(const char* s) {
+    size_t len = 0;
+    while (s[len] != 'm') {
+        if (s[len] == '\0')
+            return -1;
+        len++;
+    }
+
+    unsigned long color;
+    int err = kstrtoul(s, len, 10, &color);
+    if (err)
+        return -1;
+    if (color == 0) {
+        current = &default_color;
+        return len + 1;
+    }
+
+    /* foreground colors start at 30 */
+    color -= 30;
+    if (color >= ARRAY_SIZE(color_info))
+        return -1;
+
+    current = &color_info[color];
+    return len + 1;
+}
+
+void driver_video_printk(const char* str, int len) {
+    while (len) {
+        if (str[0] == '\033' && str[1] == '[') {
+            ssize_t add = change_ansi_color(str + 2);
+            if (add == -1) {
+                str++;
+                len--;
+                continue;
+            }
+            str += (size_t)add + 2;
+            len -= add + 2;
+            continue;
+        } else if (*str < 32) {
             bool handled = handle_escape(*str);
             if (handled) {
                 str++;
+                len--;
                 continue;
             }
         }
 
-        put_char((unsigned char)*str, row_index, column_index, red, green, blue);
+        put_char((unsigned char)*str, row_index, column_index, 
+                current->red, current->green, current->blue);
 
         str++;
         row_index++;
@@ -124,11 +186,9 @@ static void print_string(const char* str, int len, u8 red, u8 green, u8 blue) {
                 column_index = max_column_index;
             }
         }
-    }
-}
 
-void driver_video_printk(const char* str, int len) {
-    print_string(str, len, 0xFF, 0xFF, 0xFF);
+        len--;
+    }
 }
 
 void _driver_video_print_init(struct limine_framebuffer* fb) {
