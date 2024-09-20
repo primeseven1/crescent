@@ -10,11 +10,11 @@
  * @return The order
  */
 static inline unsigned int get_order(size_t size) {
+    size_t block_size = 0x1000;
     unsigned int order = 0;
-    size_t pages = (size + 4096 - 1) / 4096;
-
-    while (pages) {
-        pages >>= 1;
+    
+    while (block_size < size) {
+        block_size <<= 1;
         order++;
     }
 
