@@ -23,7 +23,7 @@
 #define PIC_READ_IRR 0x0A
 #define PIC_READ_ISR 0x0B
 
-static inline u16 pic_read_irq_reg(int ocw3) {
+static inline u16 pic_read_irq_reg(u8 ocw3) {
     outb(PIC1_COMMAND, ocw3);
     outb(PIC2_COMMAND, ocw3);
     return (inb(PIC2_COMMAND) << 8) | inb(PIC1_COMMAND);
@@ -45,6 +45,32 @@ void i8259_send_eoi(u8 irq) {
 		outb(PIC2_COMMAND,PIC_EOI);
 	
 	outb(PIC1_COMMAND,PIC_EOI);
+}
+
+void i8259_mask_irq(u8 irq) {
+    if (irq < 8) {
+        u8 mask = inb(PIC1_DATA);
+        mask |= 1 << irq;
+        outb(PIC1_DATA, mask);
+        return;
+    }
+
+    u8 mask = inb(PIC2_DATA);
+    mask |= 1 << (irq - 8);
+    outb(PIC2_DATA, mask);
+}
+
+void i8259_unmask_irq(u8 irq) {
+    if (irq < 8) {
+        u8 mask = inb(PIC1_DATA);
+        mask &= ~(1 << irq);
+        outb(PIC1_DATA, mask);
+        return;
+    }
+
+    u8 mask = inb(PIC2_DATA);
+    mask &= ~(1 << (irq - 8));
+    outb(PIC2_DATA, mask);
 }
 
 void i8259_disable(void) {

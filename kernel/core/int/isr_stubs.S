@@ -35,8 +35,9 @@
         swapgs_if_needed; \
         pushq $n; \
         call isr_common; \
-        addq $16, %rsp; \
+        addq $8, %rsp; \
         swapgs_if_needed; \
+        addq $8, %rsp; \
         iretq; \
     .size _isr_##n, . - _isr_##n; \
     .previous;
@@ -48,8 +49,9 @@
         swapgs_if_needed; \
         pushq $n; \
         call isr_common; \
-        addq $16, %rsp; \
+        addq $8, %rsp; \
         swapgs_if_needed; \
+        addq $8, %rsp; \
         iretq; \
     .size _isr_##n, . - _isr_##n; \
     .previous;
@@ -62,8 +64,9 @@
         swapgs_if_needed_msr; \
         pushq $n; \
         call isr_common; \
-        addq $16, %rsp; \
+        addq $8, %rsp; \
         swapgs_if_needed; \
+        addq $8, %rsp; \
         iretq; \
     .size _isr_##n, . - _isr_##n; \
     .previous;
@@ -75,8 +78,9 @@
         swapgs_if_needed_msr; \
         pushq $n; \
         call isr_common; \
-        addq $16, %rsp; \
+        addq $8, %rsp; \
         swapgs_if_needed; \
+        addq $8, %rsp; \
         iretq; \
     .size _isr_##n, . - _isr_##n; \
     .previous;
