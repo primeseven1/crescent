@@ -19,6 +19,7 @@
  * @retval -ERANGE Conversion would result in an integer overflow
  */
 int kstrtoll(const char* s, size_t maxlen, unsigned int base, long long* res);
+int kstrtol(const char* s, size_t maxlen, unsigned int base, long* res);
 
 /**
  * @brief Convert a string to an unsigned long long integer
@@ -36,3 +37,4 @@ int kstrtoll(const char* s, size_t maxlen, unsigned int base, long long* res);
  * @retval -ERANGE Conversion would result in an integer overflow
  */
 int kstrtoull(const char* s, size_t maxlen, unsigned int base, unsigned long long* res);
+int kstrtoul(const char* s, size_t maxlen, unsigned int base, unsigned long* res);

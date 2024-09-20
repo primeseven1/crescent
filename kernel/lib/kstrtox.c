@@ -26,7 +26,7 @@ int kstrtoll(const char* s, size_t maxlen, unsigned int base, long long* res) {
         s++;
     }
 
-    /* 
+    /*
      * If the base has to be determined automatically, then we know what the string starts with.
      * If not, then we have to check it manually, since the base was provided by the user.
      */
@@ -84,6 +84,22 @@ int kstrtoll(const char* s, size_t maxlen, unsigned int base, long long* res) {
 
     *res *= sign;
     return 0;
+}
+
+int kstrtol(const char* s, size_t maxlen, unsigned int base, long* res) {
+    long long x;
+    int err = kstrtoll(s, maxlen, base, &x);
+    *res = (long)x;
+
+    /*
+     * The #if doesn't really need to be here, (types.h already checks for the __LP64__ macro),
+     * but i'm leaving it here for code correctness reasons i guess.
+     */
+#if __SIZEOF_LONG__ != __SIZEOF_LONG_LONG__
+    if (!err && (x > LONG_MAX || x < LONG_MIN))
+        return -ERANGE;
+#endif /* __SIZEOF_LONG__, __SIZEOF_LONG_LONG__ */
+    return err;
 }
 
 int kstrtoull(const char* s, size_t maxlen, unsigned int base, unsigned long long* res) {
@@ -152,4 +168,20 @@ int kstrtoull(const char* s, size_t maxlen, unsigned int base, unsigned long lon
     }
 
     return 0;
+}
+
+int kstrtoul(const char* s, size_t maxlen, unsigned int base, unsigned long* res) {
+    unsigned long long x;
+    int err = kstrtoull(s, maxlen, base, &x);
+    *res = (long)x;
+
+    /* 
+     * Like is kstrtol, the #if does not really need to be here because types.h checks for LP64, 
+     * but i'm leaving it for code correctness.
+     */
+#if __SIZEOF_LONG__ != __SIZEOF_LONG_LONG__
+    if (!err && x > ULONG_MAX)
+        return -ERANGE;
+#endif /* __SIZEOF_LONG__, __SIZEOF_LONG_LONG__ */
+    return err;
 }
