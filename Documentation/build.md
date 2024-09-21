@@ -37,7 +37,7 @@ Build
 -----
 - First, go to project root, and then follow the next steps
 - If you're using GCC run `make kernel`
-- If you're using clang, `run make kernel CONFIG_LLVM=yes`
+- If you're using clang, run `make kernel CONFIG_LLVM=yes`
 
 ISO
 ---
