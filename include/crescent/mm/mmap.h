@@ -48,6 +48,9 @@ void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual);
 /**
  * @brief Map a page
  *
+ * This function should only be used if you have a specific physical address you want
+ * to map to.
+ *
  * @param ctx The virtual memory context to use
  * @param virtual The virtual address to map
  * @param physical The physical address to map the virtual address to
@@ -73,6 +76,55 @@ int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long
  * @retval -ENOENT Page table entry not present
  */
 int vm_unmap_page(struct vm_ctx* ctx, void* virtual);
+
+/**
+ * @brief Allocate physical memory and return a virtual address to it
+ *
+ * The only time virtual should not be NULL is when you've already allocated
+ * some virtual pages for it (via alloc_vpages function). If you don't do this,
+ * you WILL cause problems.
+ *
+ * On error, this function does NOT free any virtual pages if virtual is not NULL,
+ * and it will unmap any pages it previously successfully mapped.
+ *
+ * Values for errno:
+ *  -ENOMEM No memory available
+ *  -EINVAL Invalid MMU flags, or size is 0
+ *  -EADDRINUSE Address is already mapped
+ *  -ERANGE Tried to map a 4K page in a 2MiB page area
+ *  -EFAULT virtual is non-canonical
+ *
+ *
+ * @param virtual[in] The virtual address to map, NULL if you don't care
+ * @param size[in] The size of the allocation
+ * @param mmu_flags[in] The MMU flags to use
+ * @param gfp_flags[in] The GFP flags for conditions of physical and virtual memory allocations
+ * @param errno[out] The pointer to an errno variable if this function were to error
+ *
+ * @return (void*)-1 on error, otherwise you'll get a virtual address
+ */
+void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gfp_flags, int* errno);
+
+/**
+ * @brief Unmap a virtual address and free the physical memory allocated
+ *
+ * If you've manually allocated the virtual address (via alloc_vpages), and you don't
+ * want the virtual pages to be automatically freed for some reason, set the free_vpages
+ * parameter to false.
+ *
+ * If an error gets returned, this function will not attempt to continue unmapping any further,
+ * and will not remap any pages that were unmapped.
+ *
+ * @param virtual The virtual address to map
+ * @param size The size of the allocation
+ * @param free_vpages Set to true if you want the virtual pages to be automatically freed
+ *
+ * @retval -EFAULT virtual is -1, or another bad virtual address
+ * @retval -EINVAL size is zero
+ * @retval -EADDRNOTAVAIL Failed to get the physical address of a page (should not happen)
+ * @retval -ENOENT Page table entry not present (this should not happen)
+ */
+int kmunmap(void* virtual, size_t size, bool free_vpages);
 
 /**
  * @brief Flush the TLB for a single page
