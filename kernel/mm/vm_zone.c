@@ -25,11 +25,14 @@ struct vm_zone {
     spinlock_t lock;
 };
 
-static void* _alloc_vpages(struct vm_zone* zone, unsigned long page_count) {
+static void* _alloc_vpages(struct vm_zone* zone, unsigned long page_count, bool align_2m) {
     unsigned long consecutive_free = 0;
     unsigned long start_idx = 0;
 
     for (unsigned long i = 0; i < zone->page_count; i++) {
+        if (align_2m && consecutive_free == 0 && i % 512 != 0)
+            continue;
+
         size_t byte_index = i / 8;
         u8 bit_index = i % 8;
 
@@ -309,7 +312,18 @@ void* alloc_vpages(unsigned int gfp_flags, unsigned int order) {
         return NULL;
 
     size_t alloc_size = 4096ul << order;
+    bool huge_page = gfp_flags & GFP_VM_LARGE_PAGE;
     size_t page_count = alloc_size / 0x1000;
+
+    /* 
+     * If the huge page flag isn't cleared, then a whole new virtual 
+     * memory zone will be created for just huge pages, and we don't want that 
+     */
+    if (huge_page) {
+        gfp_flags &= ~GFP_VM_LARGE_PAGE;
+        if (page_count % 512)
+            page_count = (page_count + 512) & (~511);
+    }
 
     void* ret;
     unsigned long index = 0;
@@ -336,7 +350,7 @@ void* alloc_vpages(unsigned int gfp_flags, unsigned int order) {
 
         spinlock_lock_irq_save(&zone->lock, &zone_lock_flags);
 
-        ret = _alloc_vpages(zone, page_count);
+        ret = _alloc_vpages(zone, page_count, huge_page);
         if (ret)
             goto out;
 
@@ -347,7 +361,7 @@ void* alloc_vpages(unsigned int gfp_flags, unsigned int order) {
 
             printk("Resized the virtual memory zone (base %p) by %lu pages\n", 
                     zone->area->base, page_count);
-            ret = _alloc_vpages(zone, page_count);
+            ret = _alloc_vpages(zone, page_count, huge_page);
             if (ret)
                 goto out;
         }
