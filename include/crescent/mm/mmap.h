@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crescent/core/locking.h>
+#include <crescent/types.h>
 
 #define PAGE_ALIGN_4K(a) ((uintptr_t)(a) & ~(0x1000 - 1))
 #define PAGE_ALIGN_2M(a) ((uintptr_t)(a) & ~(0x200000 - 1))
@@ -22,6 +23,17 @@ enum mmu_flags {
 };
 
 void mmap_init(void);
+
+/**
+ * @brief Check if a page is a 2MiB page or not
+ *
+ * @param ctx The virtual memory context to use
+ * @param virtual The virtual address to check
+ *
+ * @retval true The page is a 2MiB page
+ * @retval false The page is a 4K page
+ */
+bool vm_is_huge_page(struct vm_ctx* ctx, void* virtual);
 
 /**
  * @brief Get the physical address of a virtual address

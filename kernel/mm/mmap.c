@@ -55,6 +55,30 @@ static struct vm_ctx** all_cpu_vm_ctx = NULL;
 /* Lock for the kernel address space, since all pages for the kernel address space are shared */
 static spinlock_t kas_lock = SPINLOCK_INITIALIZER;
 
+static bool is_huge_page(struct vm_ctx* ctx, void* virtaddr) {
+    unsigned long* pml4, *pdpt, *pd;
+    u16 pml4_i, pdpt_i, pd_i;
+
+    pml4 = ctx->ctx;
+    pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
+    if (!(pml4[pml4_i] & MMU_FLAG_PRESENT))
+        return false;
+
+    pdpt = get_table_virtaddr(pml4[pml4_i]);
+    pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
+    if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT))
+        return false;
+
+    pd = get_table_virtaddr(pdpt[pdpt_i]);
+    pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
+    if (!(pd[pd_i] & MMU_FLAG_PRESENT))
+        return false;
+    if (pd[pd_i] & MMU_FLAG_LARGE)
+        return true;
+
+    return false;
+}
+
 static void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr) {
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
@@ -249,6 +273,27 @@ static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     return 0;
 }
 
+bool vm_is_huge_page(struct vm_ctx* ctx, void* virtual) {
+    if (!is_virtaddr_canonical(virtual))
+        return false;
+
+    bool ret;
+    unsigned long lock_flags;
+
+    u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
+    if (top_lvl_entry >= 256) {
+        spinlock_lock_irq_save(&kas_lock, &lock_flags);
+        ret = is_huge_page(ctx, virtual);
+        spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
+    } else {
+        spinlock_lock_irq_save(&ctx->lock, &lock_flags);
+        ret = is_huge_page(ctx, virtual);
+        spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
+    }
+
+    return ret;
+}
+
 void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
     if (!is_virtaddr_canonical(virtual))
         return (void*)-1;
@@ -256,7 +301,6 @@ void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
     void* ret;
     unsigned long lock_flags;
 
-    /* TODO: Add TLB shootdown whenever the time comes */
     u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
     if (top_lvl_entry >= 256) {
         spinlock_lock_irq_save(&kas_lock, &lock_flags);
@@ -280,6 +324,7 @@ int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long
     int err;
     unsigned long lock_flags;
 
+    /* TODO: Add TLB shootdown when the time comes */
     u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
     if (top_lvl_entry >= 256) {
         spinlock_lock_irq_save(&kas_lock, &lock_flags);
