@@ -24,48 +24,43 @@ enum mmu_flags {
 void mmap_init(void);
 
 /**
- * @brief Get the physical address a virtual address maps to
+ * @brief Get the physical address of a virtual address
  *
  * @param ctx The virtual memory context to use
- * @param virtaddr The virtual address
+ * @param virtual The virtual address to get the physical address from
  *
- * @return (void*)-1 if unmapped, otherwise it returns the physical address
+ * @return (void*)-1 on failure, otherwise it returns the physical address
  */
-void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr);
+void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual);
 
 /**
- * @brief Map a virtual address to a physical address
- *
- * virtaddr and physaddr will be automatically aligned to 4K or 2M depending on if
- * MMU_FLAG_LARGE is in the flags
+ * @brief Map a page
  *
  * @param ctx The virtual memory context to use
- * @param virtaddr The virtual address to map
- * @param physaddr The physical address to map virtaddr to
- * @param mmu_flags The MMU permissions for the page
+ * @param virtual The virtual address to map
+ * @param physical The physical address to map the virtual address to
+ * @param mmu_flags The MMU flags for the page
  *
- * @retval 0 Success
- * @retval -EFAULT virtaddr is non-canonical or physaddr is too big
- * @retval -EINVAL flags are invalid
- * @retval -ENOMEM Cannot allocate memory for page tables
- * @retval -EADDRINUSE Address is already mapped
+ * @retval 0 Successful
+ * @retval -EFAULT virtual is non-canonical, or physical is bigger than the CPU supports
+ * @retval -EINVAL The mmu_flags are invalid
+ * @retval -ENOMEM No memory to allocate another page table
+ * @retval -EADDRINUSE The address is already mapped
+ * @retval -ERANGE Tried mapping a 4K page in a 2MiB page area
  */
-int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long mmu_flags);
+int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long mmu_flags);
 
 /**
- * @brief Unmap a virtual address
- *
- * virtaddr is automatically aligned to 4K or 2M depending on the MMU flags
- * for the page
+ * @brief Unmap a page
  *
  * @param ctx The virtual memory context to use
- * @param virtaddr The virtual address to unmap
+ * @param virtual The address to unmap
  *
- * @retval 0 Success
- * @retval -EFAULT virtaddr is non-canonical
+ * @retval 0 Successful
+ * @retval -EFAULT virtual is non-canonical
  * @retval -ENOENT Page table entry not present
  */
-int unmap_page(struct vm_ctx* ctx, void* virtaddr);
+int vm_unmap_page(struct vm_ctx* ctx, void* virtual);
 
 /**
  * @brief Flush the TLB for a single page

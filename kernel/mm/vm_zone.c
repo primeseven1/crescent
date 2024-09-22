@@ -241,7 +241,7 @@ static struct vm_zone* create_vm_zone(unsigned long page_count, unsigned int gfp
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     for (unsigned long i = 0; i < page_count; i++) {
         void* virtual = (u8*)zone->area->base + i * 0x1000;
-        if (get_physaddr(vm_ctx, virtual) != (void*)-1)
+        if (vm_get_physaddr(vm_ctx, virtual) != (void*)-1)
             _reserve_vpages(zone, virtual, 1);
     }
 
@@ -289,7 +289,7 @@ static int resize_vm_zone(struct vm_zone* zone, long page_count) {
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     for (unsigned long i = old_page_count - 1; i < (unsigned long)new_page_count; i++) {
         void* virtual = (u8*)zone->area->base + i * 0x1000;
-        if (get_physaddr(vm_ctx, virtual) != (void*)-1)
+        if (vm_get_physaddr(vm_ctx, virtual) != (void*)-1)
             _reserve_vpages(zone, virtual, 1);
     }
 

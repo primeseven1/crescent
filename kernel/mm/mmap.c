@@ -46,56 +46,48 @@ static inline bool is_physaddr_canonical(const void* addr) {
     return addr < max_addr;
 }
 
-void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr) {
-    if (!is_virtaddr_canonical(virtaddr))
-        return (void*)-1;
+/* 
+ * Will contain every CPU's virtual address space context. 
+ * The code that's gonna use this is not implemented 
+ */
+__attribute__((unused))
+static struct vm_ctx** all_cpu_vm_ctx = NULL;
+/* Lock for the kernel address space, since all pages for the kernel address space are shared */
+static spinlock_t kas_lock = SPINLOCK_INITIALIZER;
 
+static void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr) {
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
-
-    void* ret = (void*)-1;
-
-    unsigned long lock_flags;
-    spinlock_lock_irq_save(&ctx->lock, &lock_flags);
 
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
     if (!(pml4[pml4_i] & MMU_FLAG_PRESENT))
-        goto out;
+        return (void*)-1;
 
     pdpt = get_table_virtaddr(pml4[pml4_i]);
     pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
     if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT))
-        goto out;
+        return (void*)-1;
 
     pd = get_table_virtaddr(pdpt[pdpt_i]);
     pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
     if (!(pd[pd_i] & MMU_FLAG_PRESENT))
-        goto out;
+        return (void*)-1;
     if (pd[pd_i] & MMU_FLAG_LARGE) {
         unsigned long offset = (uintptr_t)virtaddr - PAGE_ALIGN_2M(virtaddr);
-        ret = (void*)((pd[pd_i] & ~(0xFFF | MMU_FLAG_NX)) + offset);
-        goto out;
+        return (void*)((pd[pd_i] & ~(0xFFF | MMU_FLAG_NX)) + offset);
     }
 
     pt = get_table_virtaddr(pd[pd_i]);
     pt_i = ((uintptr_t)virtaddr >> 12) & 0x01FF;
     if (!(pt[pt_i] & MMU_FLAG_PRESENT))
-        goto out;
+        return (void*)-1;
 
     unsigned long offset = (uintptr_t)virtaddr - PAGE_ALIGN_4K(virtaddr);
-    ret = (void*)((pt[pt_i] & ~(0xFFF | MMU_FLAG_NX)) + offset);
-out:
-    spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
-    return ret;
+    return (void*)((pt[pt_i] & ~(0xFFF | MMU_FLAG_NX)) + offset);
 }
 
-int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long mmu_flags) {
-    if (!is_virtaddr_canonical(virtaddr) || !is_physaddr_canonical(physaddr))
-        return -EFAULT;
-    if (!is_flags_valid(mmu_flags))
-        return -EINVAL;
-
+static int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long mmu_flags) {
     unsigned long* pml4, *pdpt, *pd, *pt; 
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
@@ -104,20 +96,16 @@ int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long m
     bool alloc_pd = false;
 
     int err;
-
-    unsigned long lock_flags;
-    spinlock_lock_irq_save(&ctx->lock, &lock_flags);
-    
+ 
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
 
     if (!(pml4[pml4_i] & MMU_FLAG_PRESENT)) {
         unsigned long* table = alloc_table();
-        /* There are no resources to release, so just go to the out label */
-        if (!table) {
-            err = -ENOMEM;
-            goto out;
-        }
+        /* There are no resources to release, so just return */
+        if (!table)
+            return -ENOMEM;
+
         alloc_pdpt = true;
         pml4[pml4_i] = (uintptr_t)table | MMU_FLAG_PRESENT | MMU_FLAG_READ_WRITE;
     }
@@ -148,8 +136,7 @@ int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long m
         physaddr = (void*)PAGE_ALIGN_2M(physaddr);
         pd[pd_i] = (uintptr_t)physaddr | mmu_flags;
         _tlb_flush_single(virtaddr);
-        err = 0;
-        goto out;
+        return 0;
     }
 
     /* 
@@ -172,18 +159,15 @@ int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long m
     pt = get_table_virtaddr(pd[pd_i]);
     pt_i = ((uintptr_t)virtaddr >> 12) & 0x01FF;
 
-    /* This can only happen if no page tables were allocated, so going to the out label is fine */
-    if (pt[pt_i] & MMU_FLAG_PRESENT) {
-        err = -EADDRINUSE;
-        goto out;
-    }
+    /* This can only happen if no page tables were allocated, so returning is fine */
+    if (pt[pt_i] & MMU_FLAG_PRESENT)
+        return -EADDRINUSE;
 
     /* Like with 2MiB pages, not aligning will cause problems with the mmu flags */
     physaddr = (void*)PAGE_ALIGN_4K(physaddr); 
     pt[pt_i] = (uintptr_t)physaddr | mmu_flags;
     _tlb_flush_single(virtaddr);
-    err = 0;
-    goto out;
+    return 0;
 err:
     if (alloc_pd) {
         free_table(pdpt[pdpt_i]);
@@ -193,8 +177,7 @@ err:
         free_table(pml4[pml4_i]);
         pml4[pml4_i] = 0;
     }
-out:
-    spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
+
     return err;
 }
 
@@ -229,31 +212,19 @@ static void try_free_tables(unsigned long* pml4, unsigned long* pdpt,
     pml4[pml4_i] = 0;
 }
 
-int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
-    if (!is_virtaddr_canonical(virtaddr))
-        return -EFAULT;
-
+static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
-    int ret;
-
-    unsigned long lock_flags;
-    spinlock_lock_irq_save(&ctx->lock, &lock_flags);
-
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr) >> 39 & 0x01FF;
-    if (!(pml4[pml4_i] & MMU_FLAG_PRESENT)) {
-        ret = -ENOENT;
-        goto out;
-    }
+    if (!(pml4[pml4_i] & MMU_FLAG_PRESENT))
+        return -ENOENT;
 
     pdpt = get_table_virtaddr(pml4[pml4_i]);
     pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
-    if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT)) {
-        ret = -ENOENT;
-        goto out;
-    }
+    if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT))
+        return -ENOENT;
 
     /* Handle 2MiB pages */
     pd = get_table_virtaddr(pdpt[pdpt_i]);
@@ -262,15 +233,12 @@ int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
         pd[pd_i] = 0;
         _tlb_flush_single(virtaddr);
         try_free_tables(pml4, pdpt, pml4_i, pd, pdpt_i, NULL, 0);
-        ret = 0;
-        goto out;
+        return 0;
     }
 
     /* Page is a 4K page, continue checking */
-    if (!(pd[pd_i] & MMU_FLAG_PRESENT)) {
-        ret = -ENOENT;
-        goto out;
-    }
+    if (!(pd[pd_i] & MMU_FLAG_PRESENT))
+        return -ENOENT;
 
     pt = get_table_virtaddr(pd[pd_i]);
     pt_i = ((uintptr_t)virtaddr >> 12) & 0x01FF;
@@ -278,10 +246,74 @@ int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     pt[pt_i] = 0;
     _tlb_flush_single(virtaddr);
     try_free_tables(pml4, pdpt, pml4_i, pd, pdpt_i, pt, pd_i);
-    ret = 0;
-out:
-    spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
+    return 0;
+}
+
+void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
+    if (!is_virtaddr_canonical(virtual))
+        return (void*)-1;
+
+    void* ret;
+    unsigned long lock_flags;
+
+    /* TODO: Add TLB shootdown whenever the time comes */
+    u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
+    if (top_lvl_entry >= 256) {
+        spinlock_lock_irq_save(&kas_lock, &lock_flags);
+        ret = get_physaddr(ctx, virtual);
+        spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
+    } else {
+        spinlock_lock_irq_save(&ctx->lock, &lock_flags);
+        ret = get_physaddr(ctx, virtual);
+        spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
+    }
+
     return ret;
+}
+
+int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long mmu_flags) {
+    if (!is_virtaddr_canonical(virtual) || !is_physaddr_canonical(physical))
+        return -EFAULT;
+    if (!is_flags_valid(mmu_flags))
+        return -EINVAL;
+
+    int err;
+    unsigned long lock_flags;
+
+    u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
+    if (top_lvl_entry >= 256) {
+        spinlock_lock_irq_save(&kas_lock, &lock_flags);
+        err = map_page(ctx, virtual, physical, mmu_flags);
+        spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
+    } else {
+        spinlock_lock_irq_save(&ctx->lock, &lock_flags);
+        err = map_page(ctx, virtual, physical, mmu_flags);
+        spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
+    }
+
+    return err;
+}
+
+int vm_unmap_page(struct vm_ctx* ctx, void* virtual) {
+    if (!is_virtaddr_canonical(virtual))
+        return -EFAULT;
+
+    int err;
+    unsigned long lock_flags;
+
+    /* TODO: Add TLB shootdown whenever the time comes */
+    u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
+    if (top_lvl_entry >= 256) {
+        spinlock_lock_irq_save(&kas_lock, &lock_flags);
+        err = unmap_page(ctx, virtual);
+        spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
+    } else {
+        spinlock_lock_irq_save(&ctx->lock, &lock_flags);
+        err = unmap_page(ctx, virtual);
+        spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
+    }
+
+    return err;
 }
 
 void mmap_init(void) {
