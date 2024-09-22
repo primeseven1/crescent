@@ -36,6 +36,7 @@ bool i8259_is_irq_spurious(u8 irq) {
 }
 
 void i8259_handle_spurious_irq(u8 irq) {
+    /* Send an EOI to PIC1 since the PIC1 doesn't know the interrupt is fake */
     if (irq >= 8)
         outb(PIC1_COMMAND, PIC_EOI);
 }
@@ -79,10 +80,6 @@ void i8259_disable(void) {
 }
 
 void i8259_init(void) {
-    /* Save the current interrupt masks */
-	u8 mask1 = inb(PIC1_DATA);
-	u8 mask2 = inb(PIC2_DATA);
-
     /* Start the initialization process in cascade mode, whatever the hell that means */
 	outb(PIC1_COMMAND, ICW1_INIT | ICW1_ICW4);
 	pmio_wait();
@@ -108,8 +105,7 @@ void i8259_init(void) {
 	pmio_wait();
 	outb(PIC2_DATA, ICW4_8086);
 	pmio_wait();
-	
-    /* Restore masks */
-	outb(PIC1_DATA, mask1);
-	outb(PIC2_DATA, mask2);
+
+    /* Mask every interrupt */
+    i8259_disable();
 }
