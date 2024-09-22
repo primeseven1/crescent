@@ -212,7 +212,7 @@ static struct vm_zone* create_vm_zone(unsigned long page_count, unsigned int gfp
     if (!area)
         return NULL;
 
-    struct vm_zone* zone = alloc_page(GFP_ZONE_NORMAL);
+    struct vm_zone* zone = alloc_page(GFP_PM_ZONE_NORMAL);
     if (!zone)
         return NULL;
     zone = hhdm_virtual(zone);
@@ -220,7 +220,7 @@ static struct vm_zone* create_vm_zone(unsigned long page_count, unsigned int gfp
     size_t map_size = page_count & 7 ? page_count / 8 + 1 : page_count / 8;
     u8* map;
     if (map_size) {
-        map = alloc_pages(GFP_ZONE_NORMAL, get_order(map_size));
+        map = alloc_pages(GFP_PM_ZONE_NORMAL, get_order(map_size));
         if (!map) {
             free_virtual_area(area);
             free_page(hhdm_physical(zone));
@@ -266,7 +266,7 @@ static int resize_vm_zone(struct vm_zone* zone, long page_count) {
 
     u8* new_map;
     if (new_page_count) {
-        new_map = alloc_pages(GFP_ZONE_NORMAL, get_order(new_map_size));
+        new_map = alloc_pages(GFP_PM_ZONE_NORMAL, get_order(new_map_size));
         if (!new_map)
             return -ENOMEM;
         new_map = hhdm_virtual(new_map);
@@ -424,7 +424,7 @@ void free_vpages(void* addr, unsigned int order) {
 }
 
 void vm_zone_init(void) {
-    kernel_vm_zones = alloc_page(GFP_ZONE_NORMAL);
+    kernel_vm_zones = alloc_page(GFP_PM_ZONE_NORMAL);
     if (!kernel_vm_zones)
         panic("Failed to allocate kernel vm zone list");
     kernel_vm_zones = hhdm_virtual(kernel_vm_zones);

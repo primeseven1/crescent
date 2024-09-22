@@ -15,7 +15,7 @@ static inline unsigned long* get_table_virtaddr(unsigned long entry) {
 }
 
 static inline unsigned long* alloc_table(void) {
-    unsigned long* page = alloc_page(GFP_ZONE_NORMAL);
+    unsigned long* page = alloc_page(GFP_PM_ZONE_NORMAL);
     if (!page)
         return NULL;
     memset(hhdm_virtual(page), 0, 4096);

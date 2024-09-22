@@ -81,7 +81,7 @@ static void reload_segment_regs(void) {
 }
 
 void segments_init(void) {
-    struct kernel_segments* segments = alloc_pages(GFP_ZONE_NORMAL, get_order(sizeof(*segments)));
+    struct kernel_segments* segments = alloc_pages(GFP_PM_ZONE_NORMAL, get_order(sizeof(*segments)));
     if (!segments)
         panic("Failed to allocate GDT!");
     segments = hhdm_virtual(segments);
@@ -90,7 +90,7 @@ void segments_init(void) {
     memcpy(segments->segments, base, sizeof(segments->segments));
 
     /* Allocate the TSS struct and IO permission bitmap, an order of 3 gives 4 4K pages */
-    struct tss_descriptor* tss = alloc_pages(GFP_ZONE_NORMAL, 3);
+    struct tss_descriptor* tss = alloc_pages(GFP_PM_ZONE_NORMAL, 3);
     if (!tss)
         panic("Failed to allocate TSS!");
     tss = hhdm_virtual(tss);
@@ -100,10 +100,10 @@ void segments_init(void) {
     unsigned int stack_order = get_order(ist_stack_size);
 
     /* Allocate 16K stacks for RSP0 and 3 IST's, these will all be different for all processors */
-    void* rsp0 = alloc_pages(GFP_ZONE_NORMAL, stack_order);
-    void* ist1 = alloc_pages(GFP_ZONE_NORMAL, stack_order);
-    void* ist2 = alloc_pages(GFP_ZONE_NORMAL, stack_order);
-    void* ist3 = alloc_pages(GFP_ZONE_NORMAL, stack_order);
+    void* rsp0 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
+    void* ist1 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
+    void* ist2 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
+    void* ist3 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
     if (!rsp0 || !ist1 || !ist2 || !ist2)
         panic("Not enough memory for TSS stacks!");
 

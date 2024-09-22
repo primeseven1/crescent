@@ -33,8 +33,17 @@ void memory_zones_init(void);
  * @brief Allocates a contiguous block of physical pages from the buddy allocator
  *
  * If you want to determine the order with a size, use the get_order function to do that.
+ * Any flags that the function doesn't care about are ignored. 
+ *
+ * If memory isn't available from a specific zone, it will try to allocate 
+ * from another zone that's more restrictive than the one you want. 
+ * (eg. a failed allocation from DMA32 zone will try the DMA zone, but not the normal zone).
+ *
+ * If you add more than 1 zone to allocate from in the flags, it will try to allocate from
+ * the most restrictive zone. So just pick one zone and go with it.
  *
  * @param gfp_flags A bitmask representing the contitions for the allocation.
+ *                  (valid flags: GFP_PM_ZONE_DMA, GFP_PM_ZONE_DMA32, GFP_PM_ZONE_NORMAL)
  * @param order The power of two number of contiguous pages to allocate 
  *              (eg. order 2 for 4 pages, order 1 for 2 pages, order 0 for 1 page)
  *
@@ -43,7 +52,10 @@ void memory_zones_init(void);
 void* alloc_pages(unsigned int gfp_flags, unsigned int order);
 
 /**
- * @brief Free a block of allocated pages from the buddy allocator
+ * @brief Free physical pages from the buddy allocator
+ *
+ * If an invalid address is passed to this function, it will just return.
+ * However, an error message will be logged using printk.
  *
  * @param addr The start address of the physical pages to free
  * @param order The power of two number of contiguous pages to free
@@ -52,9 +64,14 @@ void* alloc_pages(unsigned int gfp_flags, unsigned int order);
 void free_pages(void* addr, unsigned int order);
 
 /**
- * @brief Allocate a single page from the buddy allocator
+ * @brief Allocate a single physical page from the buddy allocator
+ *
+ * This function is just a wrapper around alloc_pages. If you want a more extended
+ * description, go to the alloc_pages function.
+ *
  * @param gfp_flags A bitmask representing the conditions for the allocation
- * @return A physical address to the page
+ *                  (valid flags: GFP_ZONE_DMA, GFP_ZONE_DMA32, GFP_ZONE_NORMAL)
+ * @return The physical address of the page, NULL if no pages are available.
  */
 static inline void* alloc_page(unsigned int gfp_flags) {
     return alloc_pages(gfp_flags, 0);
@@ -62,7 +79,11 @@ static inline void* alloc_page(unsigned int gfp_flags) {
 
 /**
  * @brief Free a single page from the buddy allocator
- * @param addr The address to free
+ *
+ * This function is simply a wrapper around free_pages. For a more extended description,
+ * read the free_pages function.
+ *
+ * @param addr The physical page to free
  */
 static inline void free_page(void* addr) {
     free_pages(addr, 0);

@@ -300,7 +300,6 @@ static int _free_pages(struct zone* zone, void* addr, unsigned int order) {
 
     unsigned long flags;
     spinlock_lock_irq_save(&zone->lock, &flags);
-
     int err = free_block(zone, layer, block);
     spinlock_unlock_irq_restore(&zone->lock, &flags);
     return err;
@@ -357,18 +356,17 @@ static struct zone* dma32_zone;
 static struct zone* normal_zone;
 
 static struct zone* get_zone_from_gfp(unsigned int gfp_flags) {
-    if (gfp_flags & GFP_ZONE_DMA)
+    if (gfp_flags & GFP_PM_ZONE_DMA)
         return dma_zone;
-    if (gfp_flags & GFP_ZONE_DMA32)
+    if (gfp_flags & GFP_PM_ZONE_DMA32)
         return dma32_zone;
-    if (gfp_flags & GFP_ZONE_NORMAL)
+    if (gfp_flags & GFP_PM_ZONE_NORMAL)
         return normal_zone;
     
     return NULL;
 }
 
 static struct zone* get_zone_from_addr(void* addr) {
-    /* No need to check the base since we know it starts at zero */
     if (addr >= dma_zone->base && (u8*)addr < (u8*)dma_zone->base + dma_zone->size)
         return dma_zone;
     if (addr >= dma32_zone->base && (u8*)addr < (u8*)dma32_zone->base + dma32_zone->size)
@@ -387,19 +385,19 @@ void* alloc_pages(unsigned int gfp_flags, unsigned int order) {
     void* ret = _alloc_pages(zone, order);
     if (!ret) {
         switch (zone->type) {
-        case GFP_ZONE_NORMAL:
+        case GFP_PM_ZONE_NORMAL:
             zone = dma32_zone;
             ret = _alloc_pages(zone, order);
             if (ret)
                 break;
         /* fall through */
-        case GFP_ZONE_DMA32:
+        case GFP_PM_ZONE_DMA32:
             zone = dma_zone;
             ret = _alloc_pages(zone, order);
             if (ret)
                 break;
         /* fall through */
-        case GFP_ZONE_DMA:
+        case GFP_PM_ZONE_DMA:
         default:
             return NULL;
         }
@@ -409,6 +407,11 @@ void* alloc_pages(unsigned int gfp_flags, unsigned int order) {
 }
 
 void free_pages(void* addr, unsigned int order) {
+    if (unlikely(addr < (void*)0x1000)) {
+        printk(PL_ERR "free_pages tried to free the first page of physical memory!\n");
+        return;
+    }
+
     struct zone* zone = get_zone_from_addr(addr);
     if (!zone) {
         printk(PL_ERR "free_pages failed to get the zone type! (%p)\n", addr);
@@ -476,7 +479,7 @@ static size_t dma_zone_init(uintptr_t base, size_t total_mem) {
     if (unlikely(!dma_zone))
         panic("Failed to initialize DMA memory zone");
 
-    memory_zone_init(dma_zone, (void*)base, zone_size_rounded, zone_size, GFP_ZONE_DMA, layers);
+    memory_zone_init(dma_zone, (void*)base, zone_size_rounded, zone_size, GFP_PM_ZONE_DMA, layers);
     memblock_reserve(dma_zone, hhdm_physical(dma_zone), sizeof(struct zone) + map_size);
     return zone_size;
 }
@@ -499,7 +502,7 @@ static size_t dma32_zone_init(uintptr_t base, size_t total_mem) {
         panic("Failed to initialize dma32 zone");
     dma32_zone = hhdm_virtual(dma32_zone);
 
-    memory_zone_init(dma32_zone, (void*)base, zone_size_rounded, zone_size, GFP_ZONE_DMA32, layers);
+    memory_zone_init(dma32_zone, (void*)base, zone_size_rounded, zone_size, GFP_PM_ZONE_DMA32, layers);
     return zone_size;
 }
 
@@ -518,7 +521,7 @@ static void normal_zone_init(uintptr_t base, size_t total_mem) {
         panic("Failed to initialize the normal memory zone");
     normal_zone = hhdm_virtual(normal_zone);
 
-    memory_zone_init(normal_zone, (void*)base, zone_size_rounded, total_mem, GFP_ZONE_NORMAL, layers);
+    memory_zone_init(normal_zone, (void*)base, zone_size_rounded, total_mem, GFP_PM_ZONE_NORMAL, layers);
 }
 
 void memory_zones_init(void) {
