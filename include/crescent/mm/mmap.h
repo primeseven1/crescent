@@ -108,23 +108,23 @@ void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gf
 /**
  * @brief Unmap a virtual address and free the physical memory allocated
  *
- * If you've manually allocated the virtual address (via alloc_vpages), and you don't
- * want the virtual pages to be automatically freed for some reason, set the free_vpages
- * parameter to false.
+ * If you've manually allocated the virtual address (via alloc_vpages), you should set the free_virtual
+ * parameter to false so that you can manually free them yourself.
  *
  * If an error gets returned, this function will not attempt to continue unmapping any further,
  * and will not remap any pages that were unmapped.
  *
  * @param virtual The virtual address to map
  * @param size The size of the allocation
- * @param free_vpages Set to true if you want the virtual pages to be automatically freed
+ * @param gfp_flags The GFP flags you used with kmmap
+ * @param free_virtual Controls whether the function should free the virtual pages or not
  *
  * @retval -EFAULT virtual is -1, or another bad virtual address
  * @retval -EINVAL size is zero
  * @retval -EADDRNOTAVAIL Failed to get the physical address of a page (should not happen)
  * @retval -ENOENT Page table entry not present (this should not happen)
  */
-int kmunmap(void* virtual, size_t size, bool free_vpages);
+int kmunmap(void* virtual, size_t size, unsigned int gfp_flags, bool free_virtual);
 
 /**
  * @brief Flush the TLB for a single page
