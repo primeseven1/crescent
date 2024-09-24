@@ -1,7 +1,8 @@
 #pragma once
 
-#include <crescent/core/locking.h>
 #include <crescent/types.h>
+#include <crescent/core/locking.h>
+#include <crescent/mm/gfp.h>
 
 #define PAGE_ALIGN_4K(a) ((uintptr_t)(a) & ~(0x1000 - 1))
 #define PAGE_ALIGN_2M(a) ((uintptr_t)(a) & ~(0x200000 - 1))
