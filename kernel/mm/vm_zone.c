@@ -283,14 +283,17 @@ static int resize_vm_zone(struct vm_zone* zone, long page_count) {
         new_map = NULL;
     }
 
-    free_pages(hhdm_physical(zone->map), get_order(old_map_size));
+    if (zone->map)
+        free_pages(hhdm_physical(zone->map), get_order(old_map_size));
 
     unsigned long old_page_count = zone->page_count;
     zone->map = new_map;
     zone->page_count = new_page_count;
 
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
-    for (unsigned long i = old_page_count - 1; i < (unsigned long)new_page_count; i++) {
+
+    unsigned long i = old_page_count ? page_count - 1 : 0;
+    for (; i < (unsigned long)new_page_count; i++) {
         void* virtual = (u8*)zone->area->base + i * 0x1000;
         if (vm_get_physaddr(vm_ctx, virtual) != (void*)-1)
             _reserve_vpages(zone, virtual, 1);
@@ -300,8 +303,9 @@ static int resize_vm_zone(struct vm_zone* zone, long page_count) {
 }
 
 static void destroy_vm_zone(struct vm_zone* zone) {
-    size_t map_size = zone->page_count / 8 + 1;
-    free_pages(hhdm_physical(zone->map), get_order(map_size));
+    size_t map_size = zone->page_count & 7 ? zone->page_count / 8 + 1 : zone->page_count / 8;
+    if (zone->map)
+        free_pages(hhdm_physical(zone->map), get_order(map_size));
     free_virtual_area(zone->area);
     free_page(hhdm_physical(zone));
 }
