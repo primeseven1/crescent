@@ -338,6 +338,10 @@ again:
         goto out;
     }
 
+    /* 
+     * If the region is not usable in the memory map, then this tries to allocate all reserved
+     * memory regions within the memory block 4KiB at a time.
+     */
     if (!is_region_usable(ret, block_size)) {
         free_block(zone, layer, block);
         for (size_t i = 0; i < block_size; i += 0x1000) {
@@ -533,13 +537,18 @@ void memory_zones_init(void) {
     uintptr_t base = 0;
     
     size_t zone_size = dma_zone_init(base, total_mem);
+
+    /* 
+     * Reserve the first page of memory so NULL can be returned when no memory is available.
+     * The limine memory map also never marks this region as usable
+     */
     memblock_reserve(dma_zone, (void*)base, 0x1000);
     base += zone_size;
     total_mem -= zone_size;
 
     zone_size = dma32_zone_init(base, total_mem);
-    if (zone_size == 0) {
-        printk("Initialized physical memory zones\n");
+    if (unlikely(zone_size == 0)) {
+        printk("Initialized physical memory zones: DMA\n");
         return;
     }
 
@@ -547,5 +556,8 @@ void memory_zones_init(void) {
     total_mem -= zone_size;
 
     normal_zone_init(base, total_mem);
-    printk("Initialized physical memory zones\n");
+    if (dma32_zone == normal_zone)
+        printk("Initialized physical memory zones: DMA, DMA32\n");
+    else
+        printk("Initialized physical memory zones: DMA, DMA32, Normal\n");
 }
