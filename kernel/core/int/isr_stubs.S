@@ -111,19 +111,20 @@ isr_common:
     subq $512, %rsp
     fxsave (%rsp)
 
+    subq $8, %rsp
+
     /* 
      * Set the mxcsr and fcw registers to what it usually is for the kernel context,
      * it's important to do this only AFTER fxsave happens
      */
-    subq $16, %rsp
     fninit
     movw $0x037F, (%rsp)
     fldcw (%rsp)
     movq $0x01F80, (%rsp)
     ldmxcsr (%rsp)
-    addq $16, %rsp
-    
     call _do_isr
+
+    addq $8, %rsp
 
     fxrstor (%rsp)
     addq $512, %rsp
