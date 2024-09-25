@@ -28,6 +28,7 @@ def do_testing_setup(path: str):
     for file in ["limine-bios.sys", "limine-bios-cd.bin", "limine-uefi-cd.bin"]:
         shutil.copy(f"./limine/{file}", f"{path}/iso_root/boot/limine/{file}")
     shutil.copy("./limine/limine", f"{path}/limine")
+    shutil.copy("./limine/LICENSE", f"{path}/LICENSE")
 
     shutil.rmtree("./limine")
 
