@@ -10,6 +10,9 @@ _start:
     cli
     cld
 
+    /* make sure the stack is aligned */
+    andq $-16, %rsp 
+
     call mmx_sse_sanity_check
     testb %al, %al
     jz .halt
@@ -40,7 +43,7 @@ mmx_sse_sanity_check:
     movb $1, %al
     jmp .ret
 .failed:
-    movb $0, %al
+    xorb %al, %al
 .ret:
     popq %rbx
     ret
@@ -48,7 +51,7 @@ mmx_sse_sanity_check:
 
 .type enable_sse, @function
 enable_sse:
-    subq $16, %rsp
+    subq $8, %rsp
 
     fninit
     movw $0x037F, (%rsp)
@@ -64,6 +67,6 @@ enable_sse:
     movl $0x01F80, (%rsp)
     ldmxcsr (%rsp)
 
-    addq $16, %rsp
+    addq $8, %rsp
     ret
 .size enable_sse, . - enable_sse
