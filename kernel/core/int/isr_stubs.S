@@ -96,6 +96,7 @@ isr_common:
 	pushq %rax
     movq %cr2, %rax
     pushq %rax
+    subq $16, %rsp /* room for fxsave pointer + padding */
 
     /* Move this into rdi as a parameter for _do_isr */
     movq %rsp, %rdi
@@ -110,6 +111,10 @@ isr_common:
     subq %rbx, %rsp
     subq $512, %rsp
     fxsave (%rsp)
+
+    /* store the pointer to the fxsave region at this location */
+    leaq 512(%rsp, %rbx), %rax
+    movq %rsp, (%rax)
 
     /* 
      * Set the mxcsr and fcw registers to what it usually is for the kernel context,
@@ -129,6 +134,7 @@ isr_common:
     addq $512, %rsp
     addq %rbx, %rsp
 
+    addq $16, %rsp
     popq %rax
     movq %rax, %cr2
     popq %rax
