@@ -13,3 +13,4 @@
 #define ERANGE 11
 #define EALREADY 12
 #define ENOMEM 13
+#define ECANCELED 14
