@@ -68,10 +68,10 @@ _Noreturn void kernel_main(void) {
     check_cpu_features();
     memory_zones_init();
     mmap_init();
+    vm_zone_init();
     segments_init();
     idt_init();
     isr_init();
-    vm_zone_init();
     heap_init();
 
     printk(PL_CRIT "Successfully finished execution!\n");
