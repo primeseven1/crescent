@@ -537,6 +537,8 @@ int kmunmap(void* virtual, size_t size, unsigned int gfp_flags, bool free_virtua
     size_t page_size = gfp_flags & GFP_VM_LARGE_PAGE ? 0x200000 : 0x1000;
     unsigned int page_size_order = get_order(page_size);
 
+    void* saved_virtual = virtual;
+
     size_t page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
     if (gfp_flags & GFP_PM_CONTIGUOUS) {
         void* physical = vm_get_physaddr(vm_ctx, virtual);
@@ -554,11 +556,12 @@ int kmunmap(void* virtual, size_t size, unsigned int gfp_flags, bool free_virtua
             if (err)
                 return err;
             free_pages(physical, page_size_order);
+            virtual = (u8*)virtual + page_size;
         }
     }
 
     if (free_virtual)
-        free_vpages(virtual, order);
+        free_vpages(saved_virtual, order);
     return 0;
 }
 

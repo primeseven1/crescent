@@ -11,6 +11,7 @@
 #include <crescent/mm/mmap.h>
 #include <crescent/mm/hhdm.h>
 #include <crescent/mm/vm_zone.h>
+#include <crescent/mm/heap.h>
 #include <crescent/drivers/video/video.h>
 
 static struct cpu bsp_cpu;
@@ -53,6 +54,7 @@ _Noreturn void kernel_main(void) {
     idt_init();
     isr_init();
     vm_zone_init();
+    heap_init();
 
     printk(PL_CRIT "Successfully finished execution!\n");
     while (1)

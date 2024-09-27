@@ -103,7 +103,7 @@ static struct slab* slab_release(struct slab_cache* cache, void* obj) {
         return NULL;
 
     /* Get the object number and then mark it as free */
-    size_t obj_num = ((uintptr_t)slab->base - (uintptr_t)obj) / cache->obj_size;
+    size_t obj_num = ((uintptr_t)obj - (uintptr_t)slab->base) / cache->obj_size;
     size_t byte_index = obj_num / 8;
     size_t bit_index = obj_num % 8;
     slab->free[byte_index] &= ~(1 << bit_index);

@@ -7,7 +7,8 @@ enum gfp_flags {
     GFP_PM_CONTIGUOUS = (1 << 3),
     GFP_VM_KERNEL = (1 << 4),
     GFP_VM_EXEC = (1 << 5),
-    GFP_VM_LARGE_PAGE = (1 << 6)
+    GFP_VM_LARGE_PAGE = (1 << 6),
+    GFP_ZERO = (1 << 7)
 };
 
 #define GFP_PM_FLAGS_MASK (GFP_PM_ZONE_DMA | GFP_PM_ZONE_DMA32 | GFP_PM_ZONE_NORMAL | GFP_PM_CONTIGUOUS)
