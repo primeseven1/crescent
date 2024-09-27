@@ -26,24 +26,40 @@ static int printf_string(char* dest, const char* s, size_t dsize) {
     return 0;
 }
 
-static int printf_int(char* dest, long long x, int base, size_t dsize) {
-    size_t len = strlen(dest);
-    if (len >= dsize)
-        return -EOVERFLOW;
-
-    dest += len;
-    dsize -= len;
-    return klltostr(dest, x, base, dsize);
+static inline void hex_to_upper(char* dest) {
+    while (*dest) {
+        if (*dest >= 'a' && *dest <= 'f')
+            *dest -= 0x20;
+        dest++;
+    }
 }
 
-static int printf_uint(char* dest, unsigned long long x, int base, size_t dsize) {
+static int printf_int(char* dest, long long x, int base, size_t dsize, bool upper) {
     size_t len = strlen(dest);
     if (len >= dsize)
         return -EOVERFLOW;
 
     dest += len;
     dsize -= len;
-    return kulltostr(dest, x, base, dsize);
+
+    int err = klltostr(dest, x, base, dsize);
+    if (!err && upper)
+        hex_to_upper(dest);
+    return err;
+}
+
+static int printf_uint(char* dest, unsigned long long x, int base, size_t dsize, bool upper) {
+    size_t len = strlen(dest);
+    if (len >= dsize)
+        return -EOVERFLOW;
+
+    dest += len;
+    dsize -= len;
+
+    int err = kulltostr(dest, x, base, dsize);
+    if (!err && upper)
+        hex_to_upper(dest);
+    return err;
 }
 
 static int printf_dbl(char* dest, double x, int afterpoint, size_t dsize) {
@@ -68,6 +84,7 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
         }
 
         int err;
+        bool hex_upper = false;
 
         switch (*++fmt) {
         case 'c':
@@ -75,19 +92,25 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
             break;
         case 'd':
         case 'i':
-            err = printf_int(buf, va_arg(va, int), 10, bufsize);
+            err = printf_int(buf, va_arg(va, int), 10, bufsize, false);
             break;
         case 'u':
-            err = printf_uint(buf, va_arg(va, unsigned int), 10, bufsize);
+            err = printf_uint(buf, va_arg(va, unsigned int), 10, bufsize, false);
             break;
+        case 'X':
+            hex_upper = true;
+            /* fall through */
         case 'x':
-            err = printf_uint(buf, va_arg(va, unsigned int), 16, bufsize);
+            err = printf_uint(buf, va_arg(va, unsigned int), 16, bufsize, hex_upper);
+            break;
+        case 'o':
+            err = printf_uint(buf, va_arg(va, unsigned int), 8, bufsize, false);
             break;
         case 'p':
             err = printf_string(buf, "0x", bufsize);
             if (err)
                 return err;
-            err = printf_uint(buf, (unsigned long long)va_arg(va, void*), 16, bufsize);
+            err = printf_uint(buf, (unsigned long long)va_arg(va, void*), 16, bufsize, false);
             break;
         case 'f':
             err = printf_dbl(buf, (float)va_arg(va, double), 5, bufsize);
@@ -99,13 +122,19 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
             switch (*++fmt) {
             case 'd':
             case 'i':
-                err = printf_int(buf, (short)va_arg(va, int), 10, bufsize);
+                err = printf_int(buf, (short)va_arg(va, int), 10, bufsize, false);
                 break;
             case 'u':
-                err = printf_uint(buf, (unsigned short)va_arg(va, unsigned int), 10, bufsize);
+                err = printf_uint(buf, (unsigned short)va_arg(va, unsigned int), 10, bufsize, false);
                 break;
+            case 'X':
+                hex_upper = true;
+                /* fall through */
             case 'x':
-                err = printf_uint(buf, (unsigned short)va_arg(va, unsigned int), 16, bufsize);
+                err = printf_uint(buf, (unsigned short)va_arg(va, unsigned int), 16, bufsize, hex_upper);
+                break;
+            case 'o':
+                err = printf_uint(buf, (unsigned short)va_arg(va, unsigned int), 8, bufsize, false);
                 break;
             default:
                 err = 0;
@@ -116,13 +145,19 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
             switch (*++fmt) {
             case 'd':
             case 'i':
-                err = printf_int(buf, va_arg(va, long), 10, bufsize);
+                err = printf_int(buf, va_arg(va, ssize_t), 10, bufsize, false);
                 break;
             case 'u':
-                err = printf_uint(buf, va_arg(va, unsigned long), 10, bufsize);
+                err = printf_uint(buf, va_arg(va, size_t), 10, bufsize, false);
                 break;
+            case 'X':
+                hex_upper = true;
+                /* fall through */
             case 'x':
-                err = printf_uint(buf, va_arg(va, unsigned long), 16, bufsize);
+                err = printf_uint(buf, va_arg(va, size_t), 16, bufsize, hex_upper);
+                break;
+            case 'o':
+                err = printf_uint(buf, va_arg(va, size_t), 8, bufsize, false);
                 break;
             default:
                 err = 0;
@@ -133,13 +168,19 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
             switch (*++fmt) {
             case 'd':
             case 'i':
-                err = printf_int(buf, va_arg(va, long), 10, bufsize);
+                err = printf_int(buf, va_arg(va, long), 10, bufsize, false);
                 break;
             case 'u':
-                err = printf_uint(buf, va_arg(va, unsigned long), 10, bufsize);
+                err = printf_uint(buf, va_arg(va, unsigned long), 10, bufsize, false);
                 break;
+            case 'X':
+                hex_upper = true;
+                /* fall through */
             case 'x':
-                err = printf_uint(buf, va_arg(va, unsigned long), 16, bufsize);
+                err = printf_uint(buf, va_arg(va, unsigned long), 16, bufsize, hex_upper);
+                break;
+            case 'o':
+                err = printf_uint(buf, va_arg(va, unsigned long), 8, bufsize, false);
                 break;
             case 'f':
                 err = printf_dbl(buf, va_arg(va, double), 10, bufsize);
@@ -148,13 +189,19 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
                 switch (*++fmt) {
                 case 'd':
                 case 'i':
-                    err = printf_int(buf, va_arg(va, long long), 10, bufsize);
+                    err = printf_int(buf, va_arg(va, long long), 10, bufsize, false);
                     break;
                 case 'u':
-                    err = printf_uint(buf, va_arg(va, unsigned long long), 10, bufsize);
+                    err = printf_uint(buf, va_arg(va, unsigned long long), 10, bufsize, false);
                     break;
+                case 'X':
+                    hex_upper = true;
+                    /* fall through */
                 case 'x':
-                    err = printf_uint(buf, va_arg(va, unsigned long long), 16, bufsize);
+                    err = printf_uint(buf, va_arg(va, unsigned long long), 16, bufsize, hex_upper);
+                    break;
+                case 'o':
+                    err = printf_uint(buf, va_arg(va, unsigned long long), 8, bufsize, false);
                     break;
                 default:
                     err = 0;
