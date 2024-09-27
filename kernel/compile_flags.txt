@@ -2,7 +2,7 @@
 -MMD
 -MP
 -std=c11
--I./include
+-I../include
 -ffreestanding
 -fno-stack-protector
 -fno-omit-frame-pointer
