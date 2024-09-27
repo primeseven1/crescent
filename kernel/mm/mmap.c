@@ -431,7 +431,7 @@ static int vm_unmap_pages(struct vm_ctx* ctx, void* virtual, unsigned long count
     return err;
 }
 
-void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gfp_flags, int* errno) {
+void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, gfp_t gfp_flags, int* errno) {
     if (size == 0) {
         *errno = -EINVAL;
         return (void*)-1;
@@ -457,7 +457,7 @@ void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gf
     unsigned int order = get_order(size);
 
     /* First try to allocate the virtual pages */
-    unsigned int gfp_virt = gfp_flags & GFP_VM_FLAGS_MASK;
+    gfp_t gfp_virt = gfp_flags & GFP_VM_FLAGS_MASK;
     if (!virtual) {
         virtual = alloc_vpages(gfp_virt, order);
         if (!virtual) {
@@ -466,7 +466,7 @@ void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gf
         }
     }
 
-    unsigned int gfp_phys = gfp_flags & GFP_PM_FLAGS_MASK;
+    gfp_t gfp_phys = gfp_flags & GFP_PM_FLAGS_MASK;
 
     /* If the block must be contiguous, allocate contiguously */
     if (gfp_flags & GFP_PM_CONTIGUOUS) {
@@ -525,7 +525,7 @@ void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gf
     return (void*)-1;
 }
 
-int kmunmap(void* virtual, size_t size, unsigned int gfp_flags, bool free_virtual) {
+int kmunmap(void* virtual, size_t size, gfp_t gfp_flags, bool free_virtual) {
     if (virtual == (void*)-1)
         return -EFAULT;
     if (size == 0)

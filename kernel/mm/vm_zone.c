@@ -20,7 +20,7 @@ struct vm_area {
 struct vm_zone {
     struct vm_area* area;
     unsigned long page_count;
-    unsigned int gfp_flags;
+    gfp_t gfp_flags;
     u8* map;
     spinlock_t lock;
 };
@@ -145,7 +145,7 @@ static void free_virtual_area(struct vm_area* area) {
     spinlock_unlock_irq_restore(&kernel_vm_areas_lock, &flags);
 }
 
-static struct vm_zone* get_zone_from_gfp(unsigned int gfp_flags, 
+static struct vm_zone* get_zone_from_gfp(gfp_t gfp_flags, 
         unsigned long start_index, unsigned long* index) {
     struct vm_zone* ret = NULL;
 
@@ -207,7 +207,7 @@ static unsigned long add_kernel_vm_zone(struct vm_zone* zone) {
     return ret;
 }
 
-static struct vm_zone* create_vm_zone(unsigned long page_count, unsigned int gfp_flags) {
+static struct vm_zone* create_vm_zone(unsigned long page_count, gfp_t gfp_flags) {
     if (page_count == 0 || page_count > MAX_4K_TOP_LEVEL_ENTRIES)
         return NULL;
 
@@ -310,7 +310,7 @@ static void destroy_vm_zone(struct vm_zone* zone) {
     free_page(hhdm_physical(zone));
 }
 
-void* alloc_vpages(unsigned int gfp_flags, unsigned int order) {
+void* alloc_vpages(gfp_t gfp_flags, unsigned int order) {
     /* This will be the case for now, since no user pages are supported yet */
     if (!(gfp_flags & GFP_VM_KERNEL))
         return NULL;

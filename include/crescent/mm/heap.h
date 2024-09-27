@@ -11,7 +11,7 @@
  *
  * @return The address of the block, NULL if there is no block
  */
-void* kmalloc(size_t size, unsigned int gfp_flags);
+void* kmalloc(size_t size, gfp_t gfp_flags);
 
 /**
  * @brief Allocate a block of memory from the kernel heap and zero it
@@ -19,7 +19,7 @@ void* kmalloc(size_t size, unsigned int gfp_flags);
  * This function is a wrapper around kmalloc, so read the kmalloc documentation
  * to get more info on parameters and return values.
  */
-static inline void* kzalloc(size_t size, unsigned int gfp_flags) {
+static inline void* kzalloc(size_t size, gfp_t gfp_flags) {
     return kmalloc(size, gfp_flags | GFP_ZERO);
 }
 
@@ -34,7 +34,7 @@ static inline void* kzalloc(size_t size, unsigned int gfp_flags) {
  *
  * @return The address of the block, NULL if there is no block
  */
-void* krealloc(void* addr, size_t new_size, unsigned int gfp_flags);
+void* krealloc(void* addr, size_t new_size, gfp_t gfp_flags);
 
 /**
  * @brief Reallocate a block of memory, and zero it
@@ -42,7 +42,7 @@ void* krealloc(void* addr, size_t new_size, unsigned int gfp_flags);
  * This function will zero, and then copy over the old block of memory.
  * Read the krealloc documentation for more info on this function.
  */
-static inline void* kzrealloc(void* addr, size_t new_size, unsigned int gfp_flags) {
+static inline void* kzrealloc(void* addr, size_t new_size, gfp_t gfp_flags) {
     return krealloc(addr, new_size, gfp_flags | GFP_ZERO);
 }
 

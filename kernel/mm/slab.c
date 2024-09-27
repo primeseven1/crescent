@@ -222,7 +222,7 @@ out:
 }
 
 struct slab_cache* slab_cache_create(size_t obj_size, size_t align, 
-        unsigned int gfp_flags, void (*ctor)(void*), void (*dtor)(void*)) {
+        gfp_t gfp_flags, void (*ctor)(void*), void (*dtor)(void*)) {
     if (gfp_flags & GFP_VM_LARGE_PAGE)
         return NULL;
 

@@ -3,6 +3,7 @@
 #include <crescent/types.h>
 #include <crescent/core/locking.h>
 #include <crescent/asm/errno.h>
+#include <crescent/mm/gfp.h>
 
 struct slab {
     void* base;
@@ -18,7 +19,7 @@ struct slab_cache {
     size_t obj_size;
     unsigned long obj_count;
     size_t align;
-    unsigned int gfp_flags;
+    gfp_t gfp_flags;
     spinlock_t lock;
 };
 
@@ -37,7 +38,7 @@ struct slab_cache {
  *              or if there's no memory available.
  */
 struct slab_cache* slab_cache_create(size_t obj_size, size_t align, 
-        unsigned int gfp_flags, void (*ctor)(void*), void (*dtor)(void*));
+        gfp_t gfp_flags, void (*ctor)(void*), void (*dtor)(void*));
 
 /**
  * @brief Destroy a slab cache

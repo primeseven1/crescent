@@ -15,7 +15,7 @@
  *
  * @return NULL if no pages are available, otherwise it returns the virtual address
  */
-void* alloc_vpages(unsigned int gfp_flags, unsigned int order);
+void* alloc_vpages(gfp_t gfp_flags, unsigned int order);
 
 /**
  * @brief Reserve virtual pages
@@ -50,7 +50,7 @@ void free_vpages(void* addr, unsigned int order);
  * @param gfp_flags A bitmask for the conditions of the allocation. valid flags start with GFP_VM
  * @param NULL if no page is available, otherwise it returns the pointer to the virtual page
  */
-static inline void* alloc_vpage(unsigned int gfp_flags) {
+static inline void* alloc_vpage(gfp_t gfp_flags) {
     return alloc_vpages(gfp_flags, 0);
 }
 

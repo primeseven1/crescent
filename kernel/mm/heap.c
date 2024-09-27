@@ -16,7 +16,7 @@ static const size_t heap_cache_sizes[HEAP_CACHE_COUNT] = {
 static struct slab_cache* heap_caches[HEAP_CACHE_COUNT] = { NULL };
 static const size_t alloc_info_size = sizeof(size_t) * 3;
 
-static struct slab_cache* get_slab_cache(size_t size, unsigned int gfp_flags) {
+static struct slab_cache* get_slab_cache(size_t size, gfp_t gfp_flags) {
     struct slab_cache* cache = NULL;
     for (size_t i = 0; i < ARRAY_SIZE(heap_caches); i++) {
         if (size <= heap_caches[i]->obj_size && heap_caches[i]->gfp_flags == gfp_flags) {
@@ -27,7 +27,7 @@ static struct slab_cache* get_slab_cache(size_t size, unsigned int gfp_flags) {
     return cache;
 }
 
-void* kmalloc(size_t size, unsigned int gfp_flags) {
+void* kmalloc(size_t size, gfp_t gfp_flags) {
     bool zero = gfp_flags & GFP_ZERO;
     gfp_flags &= ~GFP_ZERO;
 
@@ -62,7 +62,7 @@ void* kmalloc(size_t size, unsigned int gfp_flags) {
     return ret;
 }
 
-void* krealloc(void* addr, size_t new_size, unsigned int gfp_flags) {
+void* krealloc(void* addr, size_t new_size, gfp_t gfp_flags) {
     bool zero = gfp_flags & GFP_ZERO;
     gfp_flags &= ~GFP_ZERO;
 
@@ -70,7 +70,7 @@ void* krealloc(void* addr, size_t new_size, unsigned int gfp_flags) {
     size_t* old_alloc_info = (size_t*)addr - 2;
 
     size_t old_size = old_alloc_info[0];
-    size_t old_gfp_flags = old_alloc_info[1];
+    gfp_t old_gfp_flags = old_alloc_info[1];
 
     size_t* check_value = (size_t*)((u8*)addr + old_size);
     if (*check_value != HEAP_CHK_VALUE)
@@ -123,7 +123,7 @@ void kfree(void* addr) {
     size_t* alloc_info = (size_t*)addr - 2;
 
     size_t alloc_size = alloc_info[0];
-    size_t alloc_gfp_flags = alloc_info[1];
+    gfp_t alloc_gfp_flags = alloc_info[1];
 
     size_t* check_value = (size_t*)((u8*)addr + alloc_size);
     if (*check_value != HEAP_CHK_VALUE)
@@ -143,7 +143,7 @@ void kfree(void* addr) {
 
 void heap_init(void) {
     for (size_t i = 0; i < ARRAY_SIZE(heap_caches); i++) {
-        unsigned int gfp_zone;
+        gfp_t gfp_zone;
         if (i % 3 == 0)
             gfp_zone = GFP_PM_ZONE_NORMAL;
         else if (i % 3 == 1)

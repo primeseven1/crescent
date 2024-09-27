@@ -359,7 +359,7 @@ static struct zone* dma_zone;
 static struct zone* dma32_zone;
 static struct zone* normal_zone;
 
-static struct zone* get_zone_from_gfp(unsigned int gfp_flags) {
+static struct zone* get_zone_from_gfp(gfp_t gfp_flags) {
     if (gfp_flags & GFP_PM_ZONE_DMA)
         return dma_zone;
     if (gfp_flags & GFP_PM_ZONE_DMA32)
@@ -381,7 +381,7 @@ static struct zone* get_zone_from_addr(void* addr) {
     return NULL;
 }
 
-void* alloc_pages(unsigned int gfp_flags, unsigned int order) {
+void* alloc_pages(gfp_t gfp_flags, unsigned int order) {
     struct zone* zone = get_zone_from_gfp(gfp_flags);
     if (!zone)
         return NULL;

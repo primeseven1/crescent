@@ -104,7 +104,7 @@ int vm_unmap_page(struct vm_ctx* ctx, void* virtual);
  *
  * @return (void*)-1 on error, otherwise you'll get a virtual address
  */
-void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gfp_flags, int* errno);
+void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, gfp_t gfp_flags, int* errno);
 
 /**
  * @brief Unmap a virtual address and free the physical memory allocated
@@ -125,7 +125,7 @@ void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, unsigned int gf
  * @retval -EADDRNOTAVAIL Failed to get the physical address of a page (should not happen)
  * @retval -ENOENT Page table entry not present (this should not happen)
  */
-int kmunmap(void* virtual, size_t size, unsigned int gfp_flags, bool free_virtual);
+int kmunmap(void* virtual, size_t size, gfp_t gfp_flags, bool free_virtual);
 
 /**
  * @brief Flush the TLB for a single page

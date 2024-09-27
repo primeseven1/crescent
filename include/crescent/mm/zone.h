@@ -49,7 +49,7 @@ void memory_zones_init(void);
  *
  * @return NULL if no pages are available, otherwise it returns a physical address to the pages
  */
-void* alloc_pages(unsigned int gfp_flags, unsigned int order);
+void* alloc_pages(gfp_t gfp_flags, unsigned int order);
 
 /**
  * @brief Free physical pages from the buddy allocator
@@ -73,7 +73,7 @@ void free_pages(void* addr, unsigned int order);
  *                  (valid flags: GFP_ZONE_DMA, GFP_ZONE_DMA32, GFP_ZONE_NORMAL)
  * @return The physical address of the page, NULL if no pages are available.
  */
-static inline void* alloc_page(unsigned int gfp_flags) {
+static inline void* alloc_page(gfp_t gfp_flags) {
     return alloc_pages(gfp_flags, 0);
 }
 
