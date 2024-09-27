@@ -20,3 +20,4 @@
 -Waggregate-return
 -mno-red-zone
 -DCONFIG_E9_ENABLE
+-DCONFIG_DEBUG
