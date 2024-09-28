@@ -43,7 +43,7 @@ int slab_cache_grow(struct slab_cache* cache) {
     /* Now initialize the slab */
     errno = slab_init(cache, slab);
     if (errno) {
-        kmunmap(NULL, sizeof(*slab), KMMAP_ALLOC);
+        kmunmap(slab, sizeof(*slab), KMMAP_ALLOC);
         return errno;
     }
 
