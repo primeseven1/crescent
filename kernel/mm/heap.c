@@ -154,7 +154,7 @@ void heap_init(void) {
         struct slab_cache* cache = slab_cache_create(heap_cache_sizes[i], 8,
                 GFP_VM_KERNEL | gfp_zone, NULL, NULL);
         if (!cache)
-            panic("Failed to allocate slab caches for heap!\n");
+            panic("Failed to allocate slab caches for heap!");
         heap_caches[i] = cache;
     }
 }
