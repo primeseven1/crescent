@@ -11,7 +11,7 @@
 #include <crescent/lib/string.h>
 
 static inline unsigned long* get_table_virtaddr(unsigned long entry) {
-    entry &= ~(0xFFF | MMU_FLAG_NX);
+    entry &= ~(0xFFF | PT_NX);
     return hhdm_virtual((unsigned long*)entry);
 }
 
@@ -24,12 +24,12 @@ static inline unsigned long* alloc_table(void) {
 }
 
 static inline void free_table(unsigned long entry) {
-    entry &= ~(0xFFF | MMU_FLAG_NX);
+    entry &= ~(0xFFF | PT_NX);
     free_page((unsigned long*)entry);
 }
 
 static inline bool is_flags_valid(unsigned long flags) {
-    flags &= ~(0xFFF | MMU_FLAG_NX);
+    flags &= ~(0xFFF | PT_NX);
     return !flags;
 }
 
@@ -62,19 +62,19 @@ static bool is_huge_page(struct vm_ctx* ctx, void* virtaddr) {
 
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
-    if (!(pml4[pml4_i] & MMU_FLAG_PRESENT))
+    if (!(pml4[pml4_i] & PT_PRESENT))
         return false;
 
     pdpt = get_table_virtaddr(pml4[pml4_i]);
     pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
-    if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT))
+    if (!(pdpt[pdpt_i] & PT_PRESENT))
         return false;
 
     pd = get_table_virtaddr(pdpt[pdpt_i]);
     pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
-    if (!(pd[pd_i] & MMU_FLAG_PRESENT))
+    if (!(pd[pd_i] & PT_PRESENT))
         return false;
-    if (pd[pd_i] & MMU_FLAG_LARGE)
+    if (pd[pd_i] & PT_LARGE)
         return true;
 
     return false;
@@ -86,33 +86,33 @@ static void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr) {
 
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
-    if (!(pml4[pml4_i] & MMU_FLAG_PRESENT))
-        return (void*)-1;
+    if (!(pml4[pml4_i] & PT_PRESENT))
+        return NULL;
 
     pdpt = get_table_virtaddr(pml4[pml4_i]);
     pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
-    if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT))
-        return (void*)-1;
+    if (!(pdpt[pdpt_i] & PT_PRESENT))
+        return NULL;
 
     pd = get_table_virtaddr(pdpt[pdpt_i]);
     pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
-    if (!(pd[pd_i] & MMU_FLAG_PRESENT))
-        return (void*)-1;
-    if (pd[pd_i] & MMU_FLAG_LARGE) {
+    if (!(pd[pd_i] & PT_PRESENT))
+        return NULL;
+    if (pd[pd_i] & PT_LARGE) {
         unsigned long offset = (uintptr_t)virtaddr - PAGE_ALIGN_2M(virtaddr);
-        return (void*)((pd[pd_i] & ~(0xFFF | MMU_FLAG_NX)) + offset);
+        return (void*)((pd[pd_i] & ~(0xFFF | PT_NX)) + offset);
     }
 
     pt = get_table_virtaddr(pd[pd_i]);
     pt_i = ((uintptr_t)virtaddr >> 12) & 0x01FF;
-    if (!(pt[pt_i] & MMU_FLAG_PRESENT))
-        return (void*)-1;
+    if (!(pt[pt_i] & PT_PRESENT))
+        return NULL;
 
     unsigned long offset = (uintptr_t)virtaddr - PAGE_ALIGN_4K(virtaddr);
-    return (void*)((pt[pt_i] & ~(0xFFF | MMU_FLAG_NX)) + offset);
+    return (void*)((pt[pt_i] & ~(0xFFF | PT_NX)) + offset);
 }
 
-static int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long mmu_flags) {
+static int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long pt_flags) {
     unsigned long* pml4, *pdpt, *pd, *pt; 
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
@@ -125,41 +125,41 @@ static int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
 
-    if (!(pml4[pml4_i] & MMU_FLAG_PRESENT)) {
+    if (!(pml4[pml4_i] & PT_PRESENT)) {
         unsigned long* table = alloc_table();
         /* There are no resources to release, so just return */
         if (!table)
             return -ENOMEM;
 
         alloc_pdpt = true;
-        pml4[pml4_i] = (uintptr_t)table | MMU_FLAG_PRESENT | MMU_FLAG_READ_WRITE;
+        pml4[pml4_i] = (uintptr_t)table | PT_PRESENT | PT_READ_WRITE;
     }
 
     pdpt = get_table_virtaddr(pml4[pml4_i]);
     pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
 
-    if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT)) {
+    if (!(pdpt[pdpt_i] & PT_PRESENT)) {
         unsigned long* table = alloc_table();
         if (!table) {
             err = -ENOMEM;
             goto err;
         }
         alloc_pd = true;
-        pdpt[pdpt_i] = (uintptr_t)table | MMU_FLAG_PRESENT | MMU_FLAG_READ_WRITE;
+        pdpt[pdpt_i] = (uintptr_t)table | PT_PRESENT | PT_READ_WRITE;
     }
 
     pd = get_table_virtaddr(pdpt[pdpt_i]);
     pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
 
-    if (mmu_flags & MMU_FLAG_LARGE) {
-        if (pd[pd_i] & MMU_FLAG_PRESENT) {
+    if (pt_flags & PT_LARGE) {
+        if (pd[pd_i] & PT_PRESENT) {
             err = -EADDRINUSE;
             goto err;
         }
 
         /* Not aligning the address will cause problems with the mmu flags */
         physaddr = (void*)PAGE_ALIGN_2M(physaddr);
-        pd[pd_i] = (uintptr_t)physaddr | mmu_flags;
+        pd[pd_i] = (uintptr_t)physaddr | pt_flags;
         _tlb_flush_single(virtaddr);
         return 0;
     }
@@ -168,16 +168,16 @@ static int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned
      * Make sure that the PD does not have the huge page flag, 
      * since the PD maps directly to the physical address when set 
      */
-    if (pd[pd_i] & MMU_FLAG_LARGE) {
+    if (pd[pd_i] & PT_LARGE) {
         err = -ERANGE;
         goto err;
-    } else if (!(pd[pd_i] & MMU_FLAG_PRESENT)) {
+    } else if (!(pd[pd_i] & PT_PRESENT)) {
         unsigned long* table = alloc_table();
         if (!table) {
             err = -ENOMEM;
             goto err;
         }
-        pd[pd_i] = (uintptr_t)table | MMU_FLAG_PRESENT | MMU_FLAG_READ_WRITE;
+        pd[pd_i] = (uintptr_t)table | PT_PRESENT | PT_READ_WRITE;
     }
 
     /* Now try mapping the 4K page */
@@ -185,12 +185,12 @@ static int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned
     pt_i = ((uintptr_t)virtaddr >> 12) & 0x01FF;
 
     /* This can only happen if no page tables were allocated, so returning is fine */
-    if (pt[pt_i] & MMU_FLAG_PRESENT)
+    if (pt[pt_i] & PT_PRESENT)
         return -EADDRINUSE;
 
     /* Like with 2MiB pages, not aligning will cause problems with the mmu flags */
     physaddr = (void*)PAGE_ALIGN_4K(physaddr); 
-    pt[pt_i] = (uintptr_t)physaddr | mmu_flags;
+    pt[pt_i] = (uintptr_t)physaddr | pt_flags;
     _tlb_flush_single(virtaddr);
     return 0;
 err:
@@ -212,7 +212,7 @@ static void try_free_tables(unsigned long* pml4, unsigned long* pdpt,
     /* pt is null if a huge page is unmapped */
     if (pt) {
         for (u16 i = 0; i < 512; i++) {
-            if (pt[i] & MMU_FLAG_PRESENT)
+            if (pt[i] & PT_PRESENT)
                 return;
         }
 
@@ -221,7 +221,7 @@ static void try_free_tables(unsigned long* pml4, unsigned long* pdpt,
     }
 
     for (u16 i = 0; i < 512; i++) {
-        if (pd[i] & MMU_FLAG_PRESENT)
+        if (pd[i] & PT_PRESENT)
             return;
     }
 
@@ -229,7 +229,7 @@ static void try_free_tables(unsigned long* pml4, unsigned long* pdpt,
     pdpt[pdpt_i] = 0;
 
     for (u16 i = 0; i < 512; i++) {
-        if (pdpt[i] & MMU_FLAG_PRESENT)
+        if (pdpt[i] & PT_PRESENT)
             return;
     }
 
@@ -243,18 +243,18 @@ static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
 
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr) >> 39 & 0x01FF;
-    if (!(pml4[pml4_i] & MMU_FLAG_PRESENT))
+    if (!(pml4[pml4_i] & PT_PRESENT))
         return -ENOENT;
 
     pdpt = get_table_virtaddr(pml4[pml4_i]);
     pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
-    if (!(pdpt[pdpt_i] & MMU_FLAG_PRESENT))
+    if (!(pdpt[pdpt_i] & PT_PRESENT))
         return -ENOENT;
 
     /* Handle 2MiB pages */
     pd = get_table_virtaddr(pdpt[pdpt_i]);
     pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
-    if (pd[pd_i] & MMU_FLAG_LARGE) {
+    if (pd[pd_i] & PT_LARGE) {
         pd[pd_i] = 0;
         _tlb_flush_single(virtaddr);
         try_free_tables(pml4, pdpt, pml4_i, pd, pdpt_i, NULL, 0);
@@ -262,7 +262,7 @@ static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     }
 
     /* Page is a 4K page, continue checking */
-    if (!(pd[pd_i] & MMU_FLAG_PRESENT))
+    if (!(pd[pd_i] & PT_PRESENT))
         return -ENOENT;
 
     pt = get_table_virtaddr(pd[pd_i]);
@@ -297,7 +297,7 @@ bool vm_is_huge_page(struct vm_ctx* ctx, void* virtual) {
 
 void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
     if (!is_virtaddr_canonical(virtual))
-        return (void*)-1;
+        return NULL;
 
     void* ret;
     unsigned long lock_flags;
@@ -316,10 +316,10 @@ void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
     return ret;
 }
 
-int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long mmu_flags) {
+static int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long pt_flags) {
     if (!is_virtaddr_canonical(virtual) || !is_physaddr_canonical(physical))
         return -EFAULT;
-    if (!is_flags_valid(mmu_flags))
+    if (!is_flags_valid(pt_flags))
         return -EINVAL;
 
     int err;
@@ -329,27 +329,27 @@ int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long
     u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
     if (top_lvl_entry >= 256) {
         spinlock_lock_irq_save(&kas_lock, &lock_flags);
-        err = map_page(ctx, virtual, physical, mmu_flags);
+        err = map_page(ctx, virtual, physical, pt_flags);
         spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
     } else {
         spinlock_lock_irq_save(&ctx->lock, &lock_flags);
-        err = map_page(ctx, virtual, physical, mmu_flags);
+        err = map_page(ctx, virtual, physical, pt_flags);
         spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
     }
 
     return err;
 }
 
-static int vm_map_pages(struct vm_ctx* ctx, 
-        void* virtual, void* physical, unsigned long mmu_flags, unsigned long count) {
+static int vm_map_pages(struct vm_ctx* ctx, void* virtual, 
+        void* physical, unsigned long pt_flags, unsigned long count) {
     if (!is_virtaddr_canonical(virtual) || !is_physaddr_canonical(physical))
         return -EFAULT;
-    if (!is_flags_valid(mmu_flags))
+    if (!is_flags_valid(pt_flags))
         return -EINVAL;
 
     int err = 0;
     unsigned long lock_flags;
-    size_t page_size = mmu_flags & MMU_FLAG_LARGE ? 0x200000 : 0x1000;
+    size_t page_size = pt_flags & PT_LARGE ? 0x200000 : 0x1000;
 
     u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
     if (top_lvl_entry >= 256)
@@ -359,7 +359,7 @@ static int vm_map_pages(struct vm_ctx* ctx,
 
     unsigned long pages_mapped = 0;
     while (count--) {
-        err = map_page(ctx, virtual, physical, mmu_flags);
+        err = map_page(ctx, virtual, physical, pt_flags);
         if (err) {
             while (pages_mapped--) {
                 virtual = (u8*)virtual - page_size; 
@@ -380,7 +380,7 @@ static int vm_map_pages(struct vm_ctx* ctx,
     return err;
 }
 
-int vm_unmap_page(struct vm_ctx* ctx, void* virtual) {
+static int vm_unmap_page(struct vm_ctx* ctx, void* virtual) {
     if (!is_virtaddr_canonical(virtual))
         return -EFAULT;
 
@@ -431,102 +431,98 @@ static int vm_unmap_pages(struct vm_ctx* ctx, void* virtual, unsigned long count
     return err;
 }
 
-void* kmmap(void* virtual, size_t size, unsigned long mmu_flags, gfp_t gfp_flags, int* errno) {
-    if (size == 0) {
-        *errno = -EINVAL;
-        return (void*)-1;
-    }
+static unsigned long mmu_to_pt(unsigned long mmu_flags) {
+    if (!(mmu_flags & MMU_READ))
+        return 0;
+    if (mmu_flags & MMU_WRITE_THROUGH && mmu_flags & MMU_CACHE_DISABLE)
+        return 0;
 
-    mmu_flags |= MMU_FLAG_PRESENT;
+    /* 
+     * Most of the MMU flags are the same as the PT flags for 
+     * convenience reasons, NX is not one of them
+     */
+    if (!(mmu_flags & MMU_EXEC))
+        mmu_flags |= PT_NX;
+    return mmu_flags;
+}
+
+void* kmmap(void* virtual, size_t size, unsigned int flags, 
+        unsigned long mmu_flags, gfp_t gfp_flags, void* private, int* errno) {
+    unsigned long pt_flags = mmu_to_pt(mmu_flags);
+    if (size == 0 || pt_flags == 0) {
+        *errno = -EINVAL;
+        return NULL;
+    }
 
     size_t page_size;
     if (gfp_flags & GFP_VM_LARGE_PAGE) {
-        mmu_flags |= MMU_FLAG_LARGE;
-        virtual = (void*)PAGE_ALIGN_2M(virtual);
         page_size = 0x200000;
+        pt_flags |= PT_LARGE;
     } else {
-        mmu_flags &= ~MMU_FLAG_LARGE;
-        virtual = (void*)PAGE_ALIGN_4K(virtual);
         page_size = 0x1000;
     }
 
-    /* If virtual is NULL, error handling needs to be done differently */
-    bool virtual_null = (bool)virtual;
-
     unsigned long page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
-    unsigned int order = get_order(size);
 
-    /* First try to allocate the virtual pages */
     gfp_t gfp_virt = gfp_flags & GFP_VM_FLAGS_MASK;
+    unsigned int vorder = get_order(size);
+    virtual = alloc_vpages(gfp_virt, vorder);
     if (!virtual) {
-        virtual = alloc_vpages(gfp_virt, order);
-        if (!virtual) {
-            *errno = -ENOMEM;
-            return (void*)-1;
-        }
-    }
-
-    gfp_t gfp_phys = gfp_flags & GFP_PM_FLAGS_MASK;
-
-    /* If the block must be contiguous, allocate contiguously */
-    if (gfp_flags & GFP_PM_CONTIGUOUS) {
-        void* physical = alloc_pages(gfp_phys, order);
-        if (!physical) {
-            if (virtual_null)
-                free_vpages(virtual, order);
-            *errno = -ENOMEM;
-            return (void*)-1;
-        }
-        *errno = vm_map_pages(&_cpu()->vm_ctx, virtual, physical, mmu_flags, page_count);
-        if (*errno) {
-            free_pages(physical, order);
-            if (virtual_null)
-                free_vpages(virtual, order);
-            return (void*)-1;
-        }
-        return virtual;
+        *errno = -ENOMEM;
+        return NULL;
     }
 
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     void* saved_virtual = virtual;
 
-    /* Try to allocate the physical memory non-contiguously instead */
-    unsigned long pages_mapped = 0;
-    unsigned int page_size_order = get_order(page_size); 
-    while (page_count) {
-        void* physical = alloc_pages(gfp_phys, page_size_order);
-        if (!physical) {
-            *errno = -ENOMEM;
-            break;
+    if (flags & KMMAP_PHYS) {
+        *errno = vm_map_pages(vm_ctx, virtual, private, pt_flags, page_count);
+        if (*errno == 0)
+            return virtual;
+    } else if (flags & KMMAP_ALLOC) {
+        gfp_t gfp_phys = gfp_flags & GFP_PM_FLAGS_MASK;
+        unsigned int page_size_order = get_order(page_size); 
+
+        unsigned long pages_mapped = 0;
+        while (page_count) {
+            void* physical = alloc_pages(gfp_phys, page_size_order);
+            if (!physical) {
+                *errno = -ENOMEM;
+                break;
+            }
+
+            *errno = vm_map_page(vm_ctx, virtual, physical, pt_flags);
+            if (*errno)
+                break;
+
+            page_count--;
+            pages_mapped++;
+
+            virtual = (u8*)virtual + page_size;
         }
-        *errno = vm_map_page(vm_ctx, virtual, physical, mmu_flags);
-        if (*errno)
-            break;
-        virtual = (u8*)virtual + page_size;
-        page_count--;
-        pages_mapped++;
+
+        if (page_count == 0)
+            return saved_virtual;
+
+        while (pages_mapped--) {
+            virtual = (u8*)virtual - page_size;
+            void* physical = vm_get_physaddr(vm_ctx, virtual);
+            if (unlikely(!physical)) {
+                printk(PL_ERR "vm_get_physaddr returned NULL in error handling\n");
+                continue;
+            }
+
+            free_pages(physical, page_size_order);
+            vm_unmap_page(vm_ctx, virtual);
+        }
     }
 
-    /* All pages were successfully mapped, so return here */
-    if (page_count == 0)
-        return saved_virtual;
-    
-    /* Not all pages could be mapped, so get the physical address and free it, then unmap it */
-    while (pages_mapped--) {
-        virtual = (u8*)virtual - page_size;
-        void* physical = vm_get_physaddr(vm_ctx, virtual);
-        free_pages(physical, page_size_order);
-        vm_unmap_page(vm_ctx, virtual);
-    }
-   
-    if (virtual_null)
-        free_vpages(saved_virtual, order);
-
-    return (void*)-1;
+    free_vpages(saved_virtual, vorder);
+    return NULL;
 }
 
-int kmunmap(void* virtual, size_t size, gfp_t gfp_flags, bool free_virtual) {
-    if (virtual == (void*)-1)
+int kmunmap(void* virtual, size_t size, unsigned int flags) {
+    if (!virtual)
         return -EFAULT;
     if (size == 0)
         return -EINVAL;
@@ -534,23 +530,16 @@ int kmunmap(void* virtual, size_t size, gfp_t gfp_flags, bool free_virtual) {
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     unsigned int order = get_order(size);
 
-    size_t page_size = gfp_flags & GFP_VM_LARGE_PAGE ? 0x200000 : 0x1000;
+    size_t page_size = is_huge_page(vm_ctx, virtual) ? 0x200000 : 0x1000;
     unsigned int page_size_order = get_order(page_size);
-
-    void* saved_virtual = virtual;
-
     size_t page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
-    if (gfp_flags & GFP_PM_CONTIGUOUS) {
-        void* physical = vm_get_physaddr(vm_ctx, virtual);
-        if (unlikely(physical == (void*)-1))
-            return -EADDRNOTAVAIL;
 
+    if (flags & KMMAP_PHYS) {
         vm_unmap_pages(vm_ctx, virtual, page_count);
-        free_pages(physical, order);
-    } else {
+    } else if (flags & KMMAP_ALLOC) {
         while (page_count--) {
             void* physical = vm_get_physaddr(vm_ctx, virtual);
-            if (unlikely(physical == (void*)-1))
+            if (unlikely(!physical))
                 return -EADDRNOTAVAIL;
             int err = vm_unmap_page(vm_ctx, virtual);
             if (err)
@@ -560,9 +549,8 @@ int kmunmap(void* virtual, size_t size, gfp_t gfp_flags, bool free_virtual) {
         }
     }
 
-    if (free_virtual)
-        free_vpages(saved_virtual, order);
-    return 0;
+    free_vpages(virtual, order);
+    return 0; 
 }
 
 void mmap_init(void) {

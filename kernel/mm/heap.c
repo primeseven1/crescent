@@ -43,8 +43,8 @@ void* kmalloc(size_t size, gfp_t gfp_flags) {
     } else {
         int errno;
         alloc_info = kmmap(NULL, size + alloc_info_size, 
-                MMU_FLAG_READ_WRITE | MMU_FLAG_NX, gfp_flags, &errno);
-        if (alloc_info == (void*)-1)
+                KMMAP_ALLOC, MMU_READ | MMU_WRITE, gfp_flags, NULL, &errno);
+        if (!alloc_info)
             return NULL;
     }
 
@@ -86,9 +86,9 @@ void* krealloc(void* addr, size_t new_size, gfp_t gfp_flags) {
             return NULL;
     } else {
         int errno;
-        new_alloc_info = kmmap(NULL, new_size + alloc_info_size,
-                MMU_FLAG_READ_WRITE | MMU_FLAG_NX, gfp_flags, &errno);
-        if (new_alloc_info == (void*)-1)
+        new_alloc_info = kmmap(NULL, new_size + alloc_info_size, 
+                KMMAP_ALLOC, MMU_READ | MMU_WRITE, gfp_flags, NULL, &errno);
+        if (!new_alloc_info)
             return NULL;
     }
 
@@ -110,7 +110,7 @@ void* krealloc(void* addr, size_t new_size, gfp_t gfp_flags) {
     if (old_cache) {
         slab_cache_free(old_cache, old_alloc_info);
     } else {
-        int errno = kmunmap(old_alloc_info, old_size + alloc_info_size, old_gfp_flags, true);
+        int errno = kmunmap(old_alloc_info, old_size + alloc_info_size, KMMAP_ALLOC);
         if (unlikely(errno))
             printk(PL_CRIT "There was an error unmapping the heap memory (addr %p), how did this happen? (err: %i)\n", 
                     addr, errno);
@@ -134,7 +134,7 @@ void kfree(void* addr) {
     if (cache) {
         slab_cache_free(cache, alloc_info);
     } else {
-        int err = kmunmap(alloc_info, alloc_size + alloc_info_size, alloc_gfp_flags, true);
+        int err = kmunmap(alloc_info, alloc_size + alloc_info_size, KMMAP_ALLOC);
         if (unlikely(err))
             printk(PL_CRIT "There was an error unmapping the heap memory (addr %p), how did this happen? (err: %i)\n", 
                     addr, err);

@@ -290,7 +290,7 @@ void vm_zones_init(void) {
 
     size_t present_count = 0;
     for (size_t i = 0; i < ARRAY_SIZE(kernel_vm_zones); i++) {
-        if (unlikely(page_table[256 + i] & MMU_FLAG_PRESENT)) {
+        if (unlikely(page_table[256 + i] & PT_PRESENT)) {
             kernel_vm_zones[i].area.base = NULL;
             kernel_vm_zones[i].area.end = NULL;
             kernel_vm_zones[i].gfp_flags = 0;

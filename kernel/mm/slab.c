@@ -14,15 +14,17 @@ static int slab_init(struct slab_cache* cache, struct slab* slab) {
 
     /* Allocate free list bitmap */
     int errno;
-    slab->free = kmmap(NULL, map_size, MMU_FLAG_READ_WRITE | MMU_FLAG_NX, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, &errno);
-    if (slab->free == (void*)-1)
+    slab->free = kmmap(NULL, map_size, KMMAP_ALLOC, MMU_READ | MMU_WRITE, 
+            GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, NULL, &errno);
+    if (!slab->free)
         return errno;
     memset(slab->free, 0, map_size);
 
     /* Allocate a virtual address for the slab base */
-    slab->base = kmmap(NULL, size, MMU_FLAG_READ_WRITE | MMU_FLAG_NX, cache->gfp_flags, &errno);
-    if (slab->base == (void*)-1) {
-        kmunmap(slab->free, map_size, GFP_PM_ZONE_NORMAL, true);
+    slab->base = kmmap(NULL, size, KMMAP_ALLOC, 
+            MMU_READ | MMU_WRITE, cache->gfp_flags, NULL, &errno);
+    if (!slab->base) {
+        kmunmap(slab->free, map_size, KMMAP_ALLOC);
         return errno;
     }
 
@@ -33,15 +35,15 @@ static int slab_init(struct slab_cache* cache, struct slab* slab) {
 int slab_cache_grow(struct slab_cache* cache) {
     int errno;
     /* First allocate another slab */
-    struct slab* slab = kmmap(NULL, sizeof(*slab), 
-            MMU_FLAG_READ_WRITE | MMU_FLAG_NX, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, &errno);
-    if (slab == (void*)-1)
+    struct slab* slab = kmmap(NULL, sizeof(*slab), KMMAP_ALLOC, MMU_READ | MMU_WRITE, 
+            GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, NULL, &errno);
+    if (!slab)
         return errno;
 
     /* Now initialize the slab */
     errno = slab_init(cache, slab);
     if (errno) {
-        kmunmap(NULL, sizeof(*slab), GFP_PM_ZONE_NORMAL, true);
+        kmunmap(NULL, sizeof(*slab), KMMAP_ALLOC);
         return errno;
     }
 
@@ -232,9 +234,9 @@ struct slab_cache* slab_cache_create(size_t obj_size, size_t align,
         return NULL;
 
     int errno;
-    struct slab_cache* cache = kmmap(NULL, sizeof(*cache), 
-            MMU_FLAG_READ_WRITE | MMU_FLAG_NX, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, &errno);
-    if (cache == (void*)-1)
+    struct slab_cache* cache = kmmap(NULL, sizeof(*cache), KMMAP_ALLOC, 
+            MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, NULL, &errno);
+    if (!cache)
         return NULL;
 
     cache->ctor = ctor;
@@ -261,12 +263,12 @@ int slab_cache_destroy(struct slab_cache* cache) {
 		if (next)
     		next->prev = NULL;
 
-        kmunmap(slab->base, cache->obj_size * cache->obj_count, cache->gfp_flags, true);
-        kmunmap(slab, sizeof(*slab), GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, true);
+        kmunmap(slab->base, cache->obj_size * cache->obj_count, KMMAP_ALLOC);
+        kmunmap(slab, sizeof(*slab), KMMAP_ALLOC);
 
         slab = next;
     }
 
-    kmunmap(cache, sizeof(*cache), GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, true);
+    kmunmap(cache, sizeof(*cache), KMMAP_ALLOC);
     return 0;
 }
