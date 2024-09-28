@@ -81,37 +81,53 @@ static void reload_segment_regs(void) {
 }
 
 void segments_init(void) {
-    struct kernel_segments* segments = alloc_pages(GFP_PM_ZONE_NORMAL, get_order(sizeof(*segments)));
+    int errno;
+    struct kernel_segments* segments = kmmap(NULL, sizeof(*segments), KMMAP_ALLOC,
+            MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, NULL, &errno);
     if (!segments)
-        panic("Failed to allocate GDT!");
-    segments = hhdm_virtual(segments);
+        panic("Failed to allocate GDT, errno: %i", errno);
 
     /* First copy all of the base segments that are the same for all processors */
     memcpy(segments->segments, base, sizeof(segments->segments));
 
-    /* Allocate the TSS struct and IO permission bitmap, an order of 3 gives 4 4K pages */
-    struct tss_descriptor* tss = alloc_pages(GFP_PM_ZONE_NORMAL, 3);
+    /* Allocate TSS + io permission bitmap */
+    size_t tss_size = sizeof(struct tss_descriptor) + (65536 / 8);
+    struct tss_descriptor* tss = kmmap(NULL, tss_size,
+            KMMAP_ALLOC, MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, 
+            NULL, &errno);
     if (!tss)
-        panic("Failed to allocate TSS!");
-    tss = hhdm_virtual(tss);
-    memset(tss, 0, 0x4000);
+        panic("Failed to allocate TSS! errno: %i", errno);
+
+    /* 
+     * Memset to 1 for IO permission bitmap, so no IO operations 
+     * can happen at user level. The other fields will be filled in if
+     * no errors happen
+     */
+    memset(tss, 1, tss_size);
 
     size_t ist_stack_size = 0x4000;
-    unsigned int stack_order = get_order(ist_stack_size);
-
-    /* Allocate 16K stacks for RSP0 and 3 IST's, these will all be different for all processors */
-    void* rsp0 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
-    void* ist1 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
-    void* ist2 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
-    void* ist3 = alloc_pages(GFP_PM_ZONE_NORMAL, stack_order);
-    if (!rsp0 || !ist1 || !ist2 || !ist2)
-        panic("Not enough memory for TSS stacks!");
+    int errno1, errno2, errno3;
+    void* rsp0 = kmmap(NULL, ist_stack_size, KMMAP_ALLOC, 
+            MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, 
+            NULL, &errno);
+    void* ist1 = kmmap(NULL, ist_stack_size, KMMAP_ALLOC, 
+            MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, 
+            NULL, &errno1); 
+    void* ist2 = kmmap(NULL, ist_stack_size, KMMAP_ALLOC, 
+            MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, 
+            NULL, &errno2);
+    void* ist3 = kmmap(NULL, ist_stack_size, KMMAP_ALLOC, 
+            MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, 
+            NULL, &errno3);
+    if (!rsp0 || !ist1 || !ist2 || !ist3)
+        panic("Failed to allocate TSS stacks, errno: rsp0: %i ist1: %i ist2: %i ist3: %i", 
+                errno, errno1, errno2, errno3);
 
     /* Now get the virtual addresses of the stacks, and add the size since the stack grows down */
-    tss->rsp[0] = (u8*)hhdm_virtual(rsp0) + ist_stack_size;
-    tss->ist[0] = (u8*)hhdm_virtual(ist1) + ist_stack_size;
-    tss->ist[1] = (u8*)hhdm_virtual(ist2) + ist_stack_size;
-    tss->ist[2] = (u8*)hhdm_virtual(ist3) + ist_stack_size;
+    tss->rsp[0] = (u8*)rsp0 + ist_stack_size;
+    tss->ist[0] = (u8*)ist1 + ist_stack_size;
+    tss->ist[1] = (u8*)ist2 + ist_stack_size;
+    tss->ist[2] = (u8*)ist3 + ist_stack_size;
     tss->iopb = sizeof(*tss);
 
     /* Now set up the TSS descriptor */
