@@ -535,7 +535,9 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
     size_t page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
 
     if (flags & KMMAP_PHYS) {
-        vm_unmap_pages(vm_ctx, virtual, page_count);
+        int err = vm_unmap_pages(vm_ctx, virtual, page_count);
+        if (err)
+            return err;
     } else if (flags & KMMAP_ALLOC) {
         while (page_count--) {
             void* physical = vm_get_physaddr(vm_ctx, virtual);
