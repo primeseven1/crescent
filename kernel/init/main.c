@@ -68,7 +68,7 @@ _Noreturn void kernel_main(void) {
     check_cpu_features();
     memory_zones_init();
     mmap_init();
-    vm_zone_init();
+    vm_zones_init();
     segments_init();
     idt_init();
     isr_init();

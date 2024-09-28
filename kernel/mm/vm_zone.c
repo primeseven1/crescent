@@ -9,93 +9,21 @@
 #include <crescent/mm/hhdm.h>
 #include <crescent/lib/string.h>
 
-#define MAX_4K_TOP_LEVEL_ENTRIES 0x8000000ul
-
-struct vm_area {
-    void* base;
-    void* end;
-    bool locked, free;
-};
+#define PML4_MAX_4K_PAGES 0x8000000ul
+#define KERNEL_ADDRESS_SPACE_START ((void*)((256ul << 39) | 0xFFFF000000000000))
 
 struct vm_zone {
-    struct vm_area* area;
+    struct {
+        void* base;
+        void* end;
+    } area;
     unsigned long page_count;
     gfp_t gfp_flags;
     u8* map;
     spinlock_t lock;
 };
 
-static void* _alloc_vpages(struct vm_zone* zone, unsigned long page_count, bool align_2m) {
-    unsigned long consecutive_free = 0;
-    unsigned long start_idx = 0;
-
-    for (unsigned long i = 0; i < zone->page_count; i++) {
-        if (align_2m && consecutive_free == 0 && i % 512 != 0)
-            continue;
-
-        size_t byte_index = i / 8;
-        u8 bit_index = i % 8;
-
-        if (!(zone->map[byte_index] & (1 << bit_index))) {
-            if (consecutive_free == 0)
-                start_idx = i;
-
-            consecutive_free++;
-
-            if (consecutive_free == page_count) {
-                for (unsigned long j = start_idx; j < start_idx + page_count; j++) {
-                    byte_index = j / 8;
-                    bit_index = j % 8;
-                    zone->map[byte_index] |= (1 << bit_index);
-                }
-
-                return (u8*)zone->area->base + (start_idx * 0x1000);
-            }
-
-            continue;
-        }
-
-        consecutive_free = 0;
-    }
-
-    return NULL;
-}
-
-static int _reserve_vpages(struct vm_zone* zone, void* addr, unsigned long page_count) {
-    unsigned long start_idx = ((uintptr_t)addr - (uintptr_t)zone->area->base) / 0x1000;
-    if (start_idx + page_count >= zone->page_count)
-        return -EOVERFLOW;
-
-    size_t byte_index;
-    u8 bit_index;
-
-    /* First make sure all pages can be reserved */
-    for (unsigned long i = start_idx; i < start_idx + page_count; i++) {
-        byte_index = i / 8;
-        bit_index = i % 8;
-        if (zone->map[byte_index] & (1 << bit_index))
-            return -EADDRINUSE;
-    }
-
-    /* Now reserve the pages */
-    for (unsigned long i = start_idx; i < start_idx + page_count; i++) {
-        byte_index = i / 8;
-        bit_index = i % 8;
-        zone->map[byte_index] |= (1 << bit_index);
-    }
-
-    return 0;
-}
-
-static void _free_vpages(struct vm_zone* zone, void* addr, unsigned long page_count) {
-    unsigned long start_idx = ((uintptr_t)addr - (uintptr_t)zone->area->base) / 0x1000;
-    for (unsigned long i = start_idx; i < start_idx + page_count; i++) {
-        size_t byte_index = i / 8;
-        u8 bit_index = i % 8;
-        zone->map[byte_index] &= ~(1 << bit_index);
-    }
-}
-
+/* Check if the last n pages are free in a zone, this is used for shrinking memory zones */
 static bool are_last_n_pages_free(struct vm_zone* zone, unsigned long n) {
     n = (zone->page_count < n) ? zone->page_count : n;
     unsigned long start_idx = zone->page_count - n;
@@ -111,146 +39,7 @@ static bool are_last_n_pages_free(struct vm_zone* zone, unsigned long n) {
     return true;
 }
 
-#define KERNEL_VM_ZONE_COUNT 256
-
-static struct vm_zone** kernel_vm_zones;
-static spinlock_t kernel_vm_zones_lock = SPINLOCK_INITIALIZER;
-
-static struct vm_area kernel_vm_areas[KERNEL_VM_ZONE_COUNT];
-static spinlock_t kernel_vm_areas_lock = SPINLOCK_INITIALIZER;
-
-static struct vm_area* alloc_virtual_area(void) {
-    struct vm_area* ret = NULL;
-
-    unsigned long flags;
-    spinlock_lock_irq_save(&kernel_vm_areas_lock, &flags);
-
-    for (size_t i = 0; i < ARRAY_SIZE(kernel_vm_areas); i++) {
-        if (kernel_vm_areas[i].free) {
-            kernel_vm_areas[i].free = false;
-            ret = &kernel_vm_areas[i];
-            break;
-        }
-    }
-
-    spinlock_unlock_irq_restore(&kernel_vm_areas_lock, &flags);
-    return ret;
-}
-
-static void free_virtual_area(struct vm_area* area) {
-    unsigned long flags;
-    spinlock_lock_irq_save(&kernel_vm_areas_lock, &flags);
-    if (!area->locked)
-        area->free = true;
-    spinlock_unlock_irq_restore(&kernel_vm_areas_lock, &flags);
-}
-
-static struct vm_zone* get_zone_from_gfp(gfp_t gfp_flags, 
-        unsigned long start_index, unsigned long* index) {
-    struct vm_zone* ret = NULL;
-
-    unsigned long lock_flags;
-    spinlock_lock_irq_save(&kernel_vm_zones_lock, &lock_flags);
-
-    for (unsigned long i = start_index; i < KERNEL_VM_ZONE_COUNT; i++) {
-        if (!kernel_vm_zones[i])
-            continue;
-        if (kernel_vm_zones[i]->gfp_flags == gfp_flags) {
-            *index = i;
-            ret = kernel_vm_zones[i];
-            break;
-        }
-    }
-
-    spinlock_unlock_irq_restore(&kernel_vm_zones_lock, &lock_flags);
-    return ret;
-}
-
-static struct vm_zone* get_zone_from_addr(void* addr, unsigned long* index) {
-    struct vm_zone* ret = NULL;
-
-    unsigned long lock_flags;
-    spinlock_lock_irq_save(&kernel_vm_zones_lock, &lock_flags);
-
-    for (unsigned long i = 0; i < KERNEL_VM_ZONE_COUNT; i++) {
-        if (!kernel_vm_zones[i])
-            continue;
-
-        size_t zone_size = kernel_vm_zones[i]->page_count * 0x1000;
-        if (addr >= kernel_vm_zones[i]->area->base && 
-                (u8*)addr < (u8*)kernel_vm_zones[i]->area->base + zone_size) {
-            *index = i;
-            ret = kernel_vm_zones[i];
-            break;
-        }
-    }
-
-    spinlock_unlock_irq_restore(&kernel_vm_zones_lock, &lock_flags);
-    return ret;
-}
-
-static unsigned long add_kernel_vm_zone(struct vm_zone* zone) {
-    unsigned long ret = ULONG_MAX;
-
-    unsigned long lock_flags;
-    spinlock_lock_irq_save(&kernel_vm_zones_lock, &lock_flags);
-
-    for (unsigned long i = 0; i < KERNEL_VM_ZONE_COUNT; i++) {
-        if (!kernel_vm_zones[i]) {
-            kernel_vm_zones[i] = zone;
-            ret = i;
-            break;
-        }
-    }
-
-    spinlock_unlock_irq_restore(&kernel_vm_zones_lock, &lock_flags);
-    return ret;
-}
-
-static struct vm_zone* create_vm_zone(unsigned long page_count, gfp_t gfp_flags) {
-    if (page_count == 0 || page_count > MAX_4K_TOP_LEVEL_ENTRIES)
-        return NULL;
-
-    struct vm_area* area = alloc_virtual_area();
-    if (!area)
-        return NULL;
-
-    struct vm_zone* zone = alloc_page(GFP_PM_ZONE_NORMAL);
-    if (!zone)
-        return NULL;
-    zone = hhdm_virtual(zone);
-
-    size_t map_size = page_count & 7 ? page_count / 8 + 1 : page_count / 8;
-    u8* map;
-    if (map_size) {
-        map = alloc_pages(GFP_PM_ZONE_NORMAL, get_order(map_size));
-        if (!map) {
-            free_virtual_area(area);
-            free_page(hhdm_physical(zone));
-            return NULL;
-        }
-        map = hhdm_virtual(map);
-        memset(map, 0, map_size);
-    } else {
-        map = NULL;
-    }
-
-    zone->area = area;
-    zone->page_count = page_count;
-    zone->gfp_flags = gfp_flags;
-    zone->map = map;
-    zone->lock = SPINLOCK_INITIALIZER;
-
-    struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
-    for (unsigned long i = 0; i < page_count; i++) {
-        void* virtual = (u8*)zone->area->base + i * 0x1000;
-        if (vm_get_physaddr(vm_ctx, virtual) != (void*)-1)
-            _reserve_vpages(zone, virtual, 1);
-    }
-
-    return zone;
-}
-
+/* Used for growing/shrinking memory zones when needed */
 static int resize_vm_zone(struct vm_zone* zone, long page_count) {
     if (page_count == 0)
         return 0;
@@ -261,7 +50,7 @@ static int resize_vm_zone(struct vm_zone* zone, long page_count) {
     if ((page_count > 0 && (unsigned long)new_page_count <= zone->page_count) ||
             (page_count < 0 && (unsigned long)new_page_count >= zone->page_count))
         return -EOVERFLOW;
-    if ((u8*)zone->area->base + new_page_count * 0x1000 >= (u8*)zone->area->end)
+    if ((u8*)zone->area.base + new_page_count * 0x1000 >= (u8*)zone->area.end)
         return -E2BIG;
 
     size_t old_map_size = zone->page_count & 7 ? zone->page_count / 8 + 1 : zone->page_count / 8;
@@ -286,95 +75,170 @@ static int resize_vm_zone(struct vm_zone* zone, long page_count) {
     if (zone->map)
         free_pages(hhdm_physical(zone->map), get_order(old_map_size));
 
-    unsigned long old_page_count = zone->page_count;
     zone->map = new_map;
     zone->page_count = new_page_count;
 
-    struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
+    return 0;
+}
 
-    unsigned long i = old_page_count ? page_count - 1 : 0;
-    for (; i < (unsigned long)new_page_count; i++) {
-        void* virtual = (u8*)zone->area->base + i * 0x1000;
-        if (vm_get_physaddr(vm_ctx, virtual) != (void*)-1)
-            _reserve_vpages(zone, virtual, 1);
+/* Helper function for alloc_vpages */
+static void* _alloc_vpages(struct vm_zone* zone, unsigned long page_count, bool align_2m) {
+    unsigned long consecutive_free = 0;
+    unsigned long start_idx = 0;
+
+    for (unsigned long i = 0; i < zone->page_count; i++) {
+        if (align_2m && consecutive_free == 0 && i % 512 != 0)
+            continue;
+
+        size_t byte_index = i / 8;
+        u8 bit_index = i % 8;
+
+        if (!(zone->map[byte_index] & (1 << bit_index))) {
+            if (consecutive_free == 0)
+                start_idx = i;
+
+            consecutive_free++;
+
+            if (consecutive_free == page_count) {
+                for (unsigned long j = start_idx; j < start_idx + page_count; j++) {
+                    byte_index = j / 8;
+                    bit_index = j % 8;
+                    zone->map[byte_index] |= (1 << bit_index);
+                }
+
+                return (u8*)zone->area.base + (start_idx * 0x1000);
+            }
+
+            continue;
+        }
+
+        consecutive_free = 0;
+    }
+
+    return NULL;
+}
+
+/* Unused for now */
+__attribute__((unused))
+static int _reserve_vpages(struct vm_zone* zone, void* addr, unsigned long page_count) {
+    unsigned long start_idx = ((uintptr_t)addr - (uintptr_t)zone->area.base) / 0x1000;
+    if (start_idx + page_count >= zone->page_count)
+        return -EOVERFLOW;
+
+    size_t byte_index;
+    u8 bit_index;
+
+    /* First make sure all pages can be reserved */
+    for (unsigned long i = start_idx; i < start_idx + page_count; i++) {
+        byte_index = i / 8;
+        bit_index = i % 8;
+        if (zone->map[byte_index] & (1 << bit_index))
+            return -EADDRINUSE;
+    }
+
+    /* Now reserve the pages */
+    for (unsigned long i = start_idx; i < start_idx + page_count; i++) {
+        byte_index = i / 8;
+        bit_index = i % 8;
+        zone->map[byte_index] |= (1 << bit_index);
     }
 
     return 0;
 }
 
-static void destroy_vm_zone(struct vm_zone* zone) {
-    size_t map_size = zone->page_count & 7 ? zone->page_count / 8 + 1 : zone->page_count / 8;
-    if (zone->map)
-        free_pages(hhdm_physical(zone->map), get_order(map_size));
-    free_virtual_area(zone->area);
-    free_page(hhdm_physical(zone));
+/* Helper function for free_vpages */
+static void _free_vpages(struct vm_zone* zone, void* addr, unsigned long page_count) {
+    unsigned long start_idx = ((uintptr_t)addr - (uintptr_t)zone->area.base) / 0x1000;
+    for (unsigned long i = start_idx; i < start_idx + page_count; i++) {
+        size_t byte_index = i / 8;
+        u8 bit_index = i % 8;
+        zone->map[byte_index] &= ~(1 << bit_index);
+    }
+}
+
+static struct vm_zone kernel_vm_zones[256];
+
+/* 
+ * Get zone from gfp flags, index should contain the initial index, 
+ * and then the index of the zone being returned is stored back to index.
+ */
+static struct vm_zone* get_vm_zone_gfp(gfp_t gfp_flags, size_t* index) {
+    if (gfp_flags & GFP_VM_KERNEL) {
+        for (size_t i = *index; i < ARRAY_SIZE(kernel_vm_zones); i++) {
+            if ((gfp_flags & GFP_VM_EXEC) && 
+                    unlikely(!(kernel_vm_zones[i].gfp_flags & GFP_VM_EXEC)))
+                continue;
+
+            *index = i;
+            return &kernel_vm_zones[i];
+        }
+    }
+
+    return NULL;
+}
+
+/* 
+ * Get zone from an address. Unlike get_vm_zone_gfp, the initial value stored at index
+ * is ignored, but the index of the returned zone is stored at index.
+ */
+static struct vm_zone* get_vm_zone_addr(void* addr, size_t* index) {
+    if (addr >= KERNEL_ADDRESS_SPACE_START) {
+        for (size_t i = 0; i < ARRAY_SIZE(kernel_vm_zones); i++) {
+            if (addr >= kernel_vm_zones[i].area.base && addr < kernel_vm_zones[i].area.end) {
+                *index = i;
+                return &kernel_vm_zones[i];
+            }
+        }
+    }
+
+    return NULL;
 }
 
 void* alloc_vpages(gfp_t gfp_flags, unsigned int order) {
-    /* This will be the case for now, since no user pages are supported yet */
-    if (!(gfp_flags & GFP_VM_KERNEL))
-        return NULL;
-
-    size_t alloc_size = 4096ul << order;
-    bool huge_page = gfp_flags & GFP_VM_LARGE_PAGE;
-    size_t page_count = alloc_size / 0x1000;
-
-    /* 
-     * If the huge page flag isn't cleared, then a whole new virtual 
-     * memory zone will be created for just huge pages, and we don't want that 
-     */
-    if (huge_page) {
-        gfp_flags &= ~GFP_VM_LARGE_PAGE;
-        if (page_count % 512)
-            page_count = (page_count + 512) & (~511);
+    bool large_page = gfp_flags & GFP_VM_LARGE_PAGE;
+    size_t page_count = (4096ul << order) / 0x1000;
+    if (large_page) {
+        page_count = ROUND_UP(page_count, 512);
+        gfp_flags &= ~(GFP_VM_LARGE_PAGE);
     }
-
-    void* ret;
-    unsigned long index = 0;
-
+   
     struct vm_zone* zone;
     unsigned long zone_lock_flags;
+    size_t zone_index = 0;
 
+    void* ret;
     while (1) {
-        zone = get_zone_from_gfp(gfp_flags, index, &index);
-        if (!zone) {
-            zone = create_vm_zone(page_count, gfp_flags);
-            if (!zone) {
-                printk(PL_ERR "Failed to create a new memory zone\n");
-                return NULL;
-            }
-
-            index = add_kernel_vm_zone(zone);
-            if (unlikely(index == ULONG_MAX)) {
-                destroy_vm_zone(zone);
-                printk(PL_CRIT "Succesfully allocated a new kernel virtual memory zone, but could not add it to the list.\n");
-                return NULL;
-            }
-        }
-
+        /* Try getting a zone with the GFP flags */
+        zone = get_vm_zone_gfp(gfp_flags, &zone_index);
+        if (unlikely(!zone))
+            return NULL;
+        
+        /* Zone found, try allocating from it */
         spinlock_lock_irq_save(&zone->lock, &zone_lock_flags);
-
-        ret = _alloc_vpages(zone, page_count, huge_page);
+        ret = _alloc_vpages(zone, page_count, large_page);
         if (ret)
             goto out;
 
+        /* Failed to allocate, try resizing */
         while (1) {
-            int err = resize_vm_zone(zone, page_count);
-            if (err)
-                break;
+            unsigned long resize_count = page_count + 256;
+            int err = resize_vm_zone(zone, resize_count);
+            if (err) {
+                resize_count -= 256;
+                err = resize_vm_zone(zone, resize_count);
+                if (err)
+                    break;
+            }
 
-            printk("Resized the virtual memory zone (base %p) by %lu pages\n", 
-                    zone->area->base, page_count);
-            ret = _alloc_vpages(zone, page_count, huge_page);
+            printk("Resized virtual memory zone (base %p) by %lu pages\n", 
+                    zone->area.base, resize_count);
+            ret = _alloc_vpages(zone, page_count, large_page);
             if (ret)
                 goto out;
         }
 
-        /* 
-         * Since the last code failed to get a free page, we need to create another 
-         * or find another memory zone at a different index 
-         */
-        index++;
+        /* Error resizing the memory zone, try with another zone */
+        zone_index++;
         spinlock_unlock_irq_restore(&zone->lock, &zone_lock_flags);
     }
 
@@ -383,48 +247,9 @@ out:
     return ret;
 }
 
-int reserve_vpages(void* addr, unsigned int order) {
-    unsigned long unused;
-    struct vm_zone* zone = get_zone_from_addr(addr, &unused);
-    if (!zone)
-        return -EADDRNOTAVAIL;
-
-    size_t alloc_size = 4096ul << order;
-    unsigned long pages = alloc_size / 4096;
-
-    unsigned long lock_flags;
-    spinlock_lock_irq_save(&zone->lock, &lock_flags);
-    int ret = _reserve_vpages(zone, addr, pages);
-    spinlock_unlock_irq_restore(&zone->lock, &lock_flags);
-    return ret;
-}
-
-/* Here to simplify the logic of shrinking the memory zone */
-static void try_shrink_zone(struct vm_zone* zone) {
-    if (!are_last_n_pages_free(zone, 512))
-        return;
-
-    long s_zone_page_count = (long)zone->page_count;
-    if (s_zone_page_count < 0) {
-        printk(PL_ERR "Tried to shrink the virtual memory zone at base %p, but there was signed integer overflow\n",
-                zone->area->base);
-        return;
-    }
-
-    long count = s_zone_page_count < 512 ? -s_zone_page_count : -512;
-    int err = resize_vm_zone(zone, count);
-    if (!err) {
-        printk("Resized virtual memory zone (base %p) by %li pages\n", 
-                zone->area->base, count);
-    } else {
-        printk(PL_ERR "Error when resizing memory zone (base %p) err: %i\n", 
-                zone->area->base, err);
-    }
-}
-
 void free_vpages(void* addr, unsigned int order) {
-    unsigned long unused;
-    struct vm_zone* zone = get_zone_from_addr(addr, &unused);
+    unsigned long unused_index;
+    struct vm_zone* zone = get_vm_zone_addr(addr, &unused_index);
     if (!zone) {
         printk(PL_ERR "Failed to get virtual memory zone from address %p!\n", addr);
         return;
@@ -436,46 +261,63 @@ void free_vpages(void* addr, unsigned int order) {
     unsigned long lock_flags;
     spinlock_lock_irq_save(&zone->lock, &lock_flags);
 
+    /* Free the pages and then see if the zone can be shrinked */
     _free_vpages(zone, addr, page_count);
-    try_shrink_zone(zone);
+    if (zone->page_count > 512 && are_last_n_pages_free(zone, 512)) {
+        long s_zone_page_count = (long)zone->page_count;
+        if (s_zone_page_count < 0) {
+            printk(PL_ERR "Tried to shrink the virtual memory zone at base %p, but there was signed integer overflow\n",
+                    zone->area.base);
+            goto out;
+        }
+
+        long count = -512;
+        int err = resize_vm_zone(zone, count);
+        if (!err)
+            printk("Resized virtual memory zone (base %p) by %li pages\n",
+                    zone->area.base, count);
+        else
+            printk(PL_ERR "Error when resizing memory zone (base %p) err: %i\n", 
+                    zone->area.base, err);
+    }
+
+out:
     spinlock_unlock_irq_restore(&zone->lock, &lock_flags);
 }
 
-void vm_zone_init(void) {
-    kernel_vm_zones = alloc_page(GFP_PM_ZONE_NORMAL);
-    if (!kernel_vm_zones)
-        panic("Failed to allocate kernel vm zone list");
-    kernel_vm_zones = hhdm_virtual(kernel_vm_zones);
-    for (size_t i = 0; i < KERNEL_VM_ZONE_COUNT; i++)
-        kernel_vm_zones[i] = 0;
+void vm_zones_init(void) {
+    unsigned long* page_table = _cpu()->vm_ctx.ctx;
 
-    unsigned long* top_level_pt = _cpu()->vm_ctx.ctx;
-    unsigned long top_level_index = 256;
-
-    for (size_t i = 0; i < ARRAY_SIZE(kernel_vm_areas); i++) {
-        kernel_vm_areas[i].base = (void*)((top_level_index << 39) | 0xFFFF000000000000);
-        kernel_vm_areas[i].end = (u8*)kernel_vm_areas[i].base + MAX_4K_TOP_LEVEL_ENTRIES * 0x1000;
-
-        if (top_level_pt[top_level_index] & MMU_FLAG_PRESENT) {
-            kernel_vm_areas[i].free = false;
-            kernel_vm_areas[i].locked = true;
-        } else {
-            kernel_vm_areas[i].free = true;
-            kernel_vm_areas[i].locked = false;
+    size_t present_count = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(kernel_vm_zones); i++) {
+        if (unlikely(page_table[256 + i] & MMU_FLAG_PRESENT)) {
+            kernel_vm_zones[i].area.base = NULL;
+            kernel_vm_zones[i].area.end = NULL;
+            kernel_vm_zones[i].gfp_flags = 0;
+            present_count++;
+            continue;
         }
 
-        top_level_index++;
+        /* 
+         * To get the base, simply just reverse the calculation for the top page table index
+         * and then bitwise OR it with 0xFFFF000000000000 to make the address canonical.
+         */
+        kernel_vm_zones[i].area.base = (void*)(((256ul + i) << 39) | 0xFFFF000000000000);
+        kernel_vm_zones[i].area.end = (u8*)kernel_vm_zones[i].area.base + PML4_MAX_4K_PAGES * 0x1000;
+        kernel_vm_zones[i].page_count = 0;
+
+        /* 
+         * Have the first level 4 entry be marked as not executable 
+         * for a mitigiation of an AMD CPU bug. Blocking the whole entry
+         * is very overkill, but it's a simple mitigation.
+         */
+        if (unlikely(i == 0))
+            kernel_vm_zones[i].gfp_flags = GFP_VM_KERNEL;
+        else
+            kernel_vm_zones[i].gfp_flags = GFP_VM_KERNEL | GFP_VM_EXEC;
+
+        kernel_vm_zones[i].lock = SPINLOCK_INITIALIZER;
     }
 
-    /* 
-     * Create the first virtual memory zone. Lock the area so it cannot be freed.
-     * Doing this also mitigates a CPU bug around executing code around the canonical
-     * address boundary for AMD cpu's since it will find the first virtual memory area and
-     * lock it.
-     */
-    struct vm_zone* zone = create_vm_zone(1, GFP_VM_KERNEL);
-    if (!zone)
-        panic("Failed to create the first virtual memory zone. This should not happen!");
-    zone->area->locked = true;
-    printk("Initialized virtual memory zones\n");
+    printk("Initialized virtual memory zones, ranges reserved by loader: %zu\n", present_count);
 }

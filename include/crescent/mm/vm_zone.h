@@ -68,4 +68,4 @@ static inline void free_vpage(void* addr) {
 /**
  * @brief Initialize the ability to use virtual memory zones
  */
-void vm_zone_init(void);
+void vm_zones_init(void);
