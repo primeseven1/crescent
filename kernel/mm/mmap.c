@@ -237,6 +237,45 @@ err:
     return err;
 }
 
+static int change_pt_flags(struct vm_ctx* ctx, void* virtaddr, unsigned long pt_flags) {
+    unsigned long* pml4, *pdpt, *pd, *pt; 
+    u16 pml4_i, pdpt_i, pd_i, pt_i;
+
+    pml4 = ctx->ctx;
+    pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
+    if (!(pml4[pml4_i] & PT_PRESENT))
+        return -ENOENT;
+
+    pdpt = get_table_virtaddr(pml4[pml4_i]);
+    pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
+    if (!(pdpt[pdpt_i] & PT_PRESENT))
+        return -ENOENT;
+
+    pd = get_table_virtaddr(pdpt[pdpt_i]);
+    pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
+    if (!(pd[pd_i] & PT_PRESENT)) {
+        return -ENOENT;
+    } else if (pd[pd_i] & PT_LARGE) {
+        if (!(pt_flags & PT_LARGE))
+            return -ERANGE;
+
+        pd[pd_i] &= ~(0xFFF | PT_NX);
+        pd[pd_i] |= pt_flags;
+        _tlb_flush_single(virtaddr);
+
+        return 0;
+    }
+
+    pt = get_table_virtaddr(pd[pd_i]);
+    pt_i = ((uintptr_t)virtaddr >> 12) & 0x01FF;
+
+    pt[pt_i] &= ~(0xFFF | PT_NX);
+    pt[pt_i] |= pt_flags;
+    _tlb_flush_single(virtaddr);
+
+    return 0;
+}
+
 static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
@@ -347,6 +386,45 @@ static int vm_map_pages(struct vm_ctx* ctx, void* virtual,
         
         virtual = (u8*)virtual + page_size;
         physical = (u8*)physical + page_size;
+
+        pages_mapped++;
+    }
+
+    if (top_lvl_entry >= 256)
+        spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
+    else
+        spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
+    return err;
+}
+
+/* Unused for now */
+__attribute__((unused))
+static int vm_change_pt_flags(struct vm_ctx* ctx, void* virtual, unsigned long pt_flags, unsigned long count) {
+    if (!is_virtaddr_canonical(virtual))
+        return -EFAULT;
+    if (!is_flags_valid(pt_flags))
+        return -EINVAL;
+
+    int err = 0;
+    unsigned long lock_flags;
+    size_t page_size = pt_flags & PT_LARGE ? 0x200000 : 0x1000;
+
+    u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
+    if (top_lvl_entry >= 256)
+        spinlock_lock_irq_save(&kas_lock, &lock_flags);
+    else
+        spinlock_lock_irq_save(&ctx->lock, &lock_flags);
+
+    while (count) {
+        err = change_pt_flags(ctx, virtual, pt_flags);
+        if (err) {
+            printk(PL_CRIT "vm_change_pt_flags: Failed to change pt flags on all pages (remaining: %lu, errno: %i)", 
+                    count, err);
+            break;
+        }
+        
+        virtual = (u8*)virtual + page_size;
+        count--;
     }
 
     if (top_lvl_entry >= 256)
@@ -370,12 +448,16 @@ static int vm_unmap_pages(struct vm_ctx* ctx, void* virtual, unsigned long count
         spinlock_lock_irq_save(&ctx->lock, &lock_flags);
 
     size_t page_size = is_huge_page(ctx, virtual);
-    while (count--) {
+    while (count) {
         err = unmap_page(ctx, virtual);
-        if (err)
+        if (err) {
+            printk(PL_CRIT "vm_unmap_pages: There still may be some mapped pages (remaining: %lu, errno: %i)\n", 
+                    count, err);
             break;
+        }
 
         virtual = (u8*)virtual + page_size;
+        count--;
     }
 
     if (top_lvl_entry >= 256)
