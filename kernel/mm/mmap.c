@@ -28,6 +28,37 @@ static inline void free_table(unsigned long entry) {
     free_page((unsigned long*)entry);
 }
 
+/* Attempt to free page tables once a page is unmapped */
+static void try_free_tables(unsigned long* pml4, unsigned long* pdpt, 
+        u16 pml4_i, unsigned long* pd, u16 pdpt_i, unsigned long* pt, u16 pd_i) {
+    /* pt is null if a huge page is unmapped */
+    if (pt) {
+        for (u16 i = 0; i < 512; i++) {
+            if (pt[i] & PT_PRESENT)
+                return;
+        }
+
+        free_table((uintptr_t)hhdm_physical(pt));
+        pd[pd_i] = 0;
+    }
+
+    for (u16 i = 0; i < 512; i++) {
+        if (pd[i] & PT_PRESENT)
+            return;
+    }
+
+    free_table((uintptr_t)hhdm_physical(pd));
+    pdpt[pdpt_i] = 0;
+
+    for (u16 i = 0; i < 512; i++) {
+        if (pdpt[i] & PT_PRESENT)
+            return;
+    }
+
+    free_table((uintptr_t)hhdm_physical(pdpt));
+    pml4[pml4_i] = 0;
+}
+
 static inline bool is_flags_valid(unsigned long flags) {
     flags &= ~(0xFFF | PT_NX);
     return !flags;
@@ -206,37 +237,6 @@ err:
     return err;
 }
 
-/* Attempt to free page tables once a page is unmapped */
-static void try_free_tables(unsigned long* pml4, unsigned long* pdpt, 
-        u16 pml4_i, unsigned long* pd, u16 pdpt_i, unsigned long* pt, u16 pd_i) {
-    /* pt is null if a huge page is unmapped */
-    if (pt) {
-        for (u16 i = 0; i < 512; i++) {
-            if (pt[i] & PT_PRESENT)
-                return;
-        }
-
-        free_table((uintptr_t)hhdm_physical(pt));
-        pd[pd_i] = 0;
-    }
-
-    for (u16 i = 0; i < 512; i++) {
-        if (pd[i] & PT_PRESENT)
-            return;
-    }
-
-    free_table((uintptr_t)hhdm_physical(pd));
-    pdpt[pdpt_i] = 0;
-
-    for (u16 i = 0; i < 512; i++) {
-        if (pdpt[i] & PT_PRESENT)
-            return;
-    }
-
-    free_table((uintptr_t)hhdm_physical(pdpt));
-    pml4[pml4_i] = 0;
-}
-
 static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
@@ -316,30 +316,6 @@ void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
     return ret;
 }
 
-static int vm_map_page(struct vm_ctx* ctx, void* virtual, void* physical, unsigned long pt_flags) {
-    if (!is_virtaddr_canonical(virtual) || !is_physaddr_canonical(physical))
-        return -EFAULT;
-    if (!is_flags_valid(pt_flags))
-        return -EINVAL;
-
-    int err;
-    unsigned long lock_flags;
-
-    /* TODO: Add TLB shootdown when the time comes */
-    u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
-    if (top_lvl_entry >= 256) {
-        spinlock_lock_irq_save(&kas_lock, &lock_flags);
-        err = map_page(ctx, virtual, physical, pt_flags);
-        spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
-    } else {
-        spinlock_lock_irq_save(&ctx->lock, &lock_flags);
-        err = map_page(ctx, virtual, physical, pt_flags);
-        spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
-    }
-
-    return err;
-}
-
 static int vm_map_pages(struct vm_ctx* ctx, void* virtual, 
         void* physical, unsigned long pt_flags, unsigned long count) {
     if (!is_virtaddr_canonical(virtual) || !is_physaddr_canonical(physical))
@@ -377,28 +353,6 @@ static int vm_map_pages(struct vm_ctx* ctx, void* virtual,
         spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
     else
         spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
-    return err;
-}
-
-static int vm_unmap_page(struct vm_ctx* ctx, void* virtual) {
-    if (!is_virtaddr_canonical(virtual))
-        return -EFAULT;
-
-    int err;
-    unsigned long lock_flags;
-
-    /* TODO: Add TLB shootdown whenever the time comes */
-    u16 top_lvl_entry = (uintptr_t)virtual >> 39 & 0x01FF;
-    if (top_lvl_entry >= 256) {
-        spinlock_lock_irq_save(&kas_lock, &lock_flags);
-        err = unmap_page(ctx, virtual);
-        spinlock_unlock_irq_restore(&kas_lock, &lock_flags);
-    } else {
-        spinlock_lock_irq_save(&ctx->lock, &lock_flags);
-        err = unmap_page(ctx, virtual);
-        spinlock_unlock_irq_restore(&ctx->lock, &lock_flags);
-    }
-
     return err;
 }
 
@@ -491,7 +445,7 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
                 break;
             }
 
-            *errno = vm_map_page(vm_ctx, virtual, physical, pt_flags);
+            *errno = vm_map_pages(vm_ctx, virtual, physical, pt_flags, 1);
             if (*errno)
                 break;
 
@@ -513,7 +467,7 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
             }
 
             free_pages(physical, page_size_order);
-            vm_unmap_page(vm_ctx, virtual);
+            vm_unmap_pages(vm_ctx, virtual, 1);
         }
     }
 
@@ -543,7 +497,7 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
             void* physical = vm_get_physaddr(vm_ctx, virtual);
             if (unlikely(!physical))
                 return -EADDRNOTAVAIL;
-            int err = vm_unmap_page(vm_ctx, virtual);
+            int err = vm_unmap_pages(vm_ctx, virtual, 1);
             if (err)
                 return err;
             free_pages(physical, page_size_order);
