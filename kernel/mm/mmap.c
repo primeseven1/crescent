@@ -29,9 +29,9 @@ static inline void free_table(unsigned long entry) {
 }
 
 /* Attempt to free page tables once a page is unmapped */
-static void try_free_tables(unsigned long* pml4, unsigned long* pdpt, 
-        u16 pml4_i, unsigned long* pd, u16 pdpt_i, unsigned long* pt, u16 pd_i) {
-    /* pt is null if a huge page is unmapped */
+static void try_free_tables(unsigned long* pml4, u16 pml4_i,
+        unsigned long* pdpt, u16 pdpt_i, unsigned long* pd, u16 pd_i, unsigned long* pt) {
+    /* PT can be null if a huge page is being unmapped */
     if (pt) {
         for (u16 i = 0; i < 512; i++) {
             if (pt[i] & PT_PRESENT)
@@ -43,7 +43,7 @@ static void try_free_tables(unsigned long* pml4, unsigned long* pdpt,
     }
 
     for (u16 i = 0; i < 512; i++) {
-        if (pd[i] & PT_PRESENT)
+        if (pd[pd_i] & PT_PRESENT)
             return;
     }
 
@@ -296,7 +296,7 @@ static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     if (pd[pd_i] & PT_LARGE) {
         pd[pd_i] = 0;
         _tlb_flush_single(virtaddr);
-        try_free_tables(pml4, pdpt, pml4_i, pd, pdpt_i, NULL, 0);
+        try_free_tables(pml4, pml4_i, pdpt, pdpt_i, pd, 0, NULL);
         return 0;
     }
 
@@ -309,7 +309,7 @@ static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
 
     pt[pt_i] = 0;
     _tlb_flush_single(virtaddr);
-    try_free_tables(pml4, pdpt, pml4_i, pd, pdpt_i, pt, pd_i);
+    try_free_tables(pml4, pml4_i, pdpt, pdpt_i, pd, pd_i, pt);
     return 0;
 }
 
