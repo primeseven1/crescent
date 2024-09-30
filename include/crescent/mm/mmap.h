@@ -89,6 +89,17 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
         unsigned long mmu_flags, gfp_t gfp_flags, void* private, int* errno);
 
 /**
+ * @brief Change the MMU flags of a page
+ *
+ * @param virtual The virtual address to change the MMU flags for
+ * @param size The size of the region
+ * @param mmu_flags The new MMU flags to use
+ *
+ * @retval 0 Success
+ */
+int kmprotect(void* virtual, size_t size, unsigned long mmu_flags);
+
+/**
  * @brief Unmap memory from the virtual address space
  *
  * @param virtual The virtual address to unmap

@@ -397,8 +397,6 @@ static int vm_map_pages(struct vm_ctx* ctx, void* virtual,
     return err;
 }
 
-/* Unused for now */
-__attribute__((unused))
 static int vm_change_pt_flags(struct vm_ctx* ctx, void* virtual, unsigned long pt_flags, unsigned long count) {
     if (!is_virtaddr_canonical(virtual))
         return -EFAULT;
@@ -555,6 +553,22 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
 
     free_vpages(saved_virtual, vorder);
     return NULL;
+}
+
+int kmprotect(void* virtual, size_t size, unsigned long mmu_flags) {
+    if (!virtual)
+        return -EFAULT;
+    unsigned long pt_flags = mmu_to_pt(mmu_flags);
+    if (size == 0 || pt_flags == 0)
+        return -EINVAL;
+
+    struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
+
+    bool huge_page = vm_is_huge_page(vm_ctx, virtual);
+    size_t page_size = huge_page ? 0x200000 : 0x1000;
+
+    unsigned long page_count = (uintptr_t)virtual & (page_size - 1) ? size / page_size + 1 : size / page_size;
+    return vm_change_pt_flags(vm_ctx, virtual, pt_flags, page_count);
 }
 
 int kmunmap(void* virtual, size_t size, unsigned int flags) {
