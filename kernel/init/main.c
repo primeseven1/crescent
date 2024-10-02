@@ -1,6 +1,7 @@
 #include <crescent/common.h>
 #include <crescent/core/printk.h>
 #include <crescent/core/panic.h>
+#include <crescent/core/cmdline.h>
 #include <crescent/core/cpu.h>
 #include <crescent/core/debug/e9.h>
 #include <crescent/core/debug/trace.h>
@@ -73,6 +74,10 @@ _Noreturn void kernel_main(void) {
     idt_init();
     isr_init();
     heap_init();
+
+    err = cmdline_parse();
+    if (err)
+        printk(PL_WARN "cmdline_parse() failed with code %i!\n", err);
 
     printk(PL_CRIT "Successfully finished execution!\n");
     while (1)

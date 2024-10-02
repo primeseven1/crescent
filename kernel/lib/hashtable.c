@@ -114,7 +114,7 @@ int hashtable_search(struct hashtable* table, const void* key, size_t key_size, 
     unsigned long flags;
     spinlock_lock_irq_save(&table->lock, &flags);
 
-    size_t index = hash & table->head_count;
+    size_t index = hash % table->head_count;
 
     const struct hashtable_node* node = table->heads[index];
     while (node) {
