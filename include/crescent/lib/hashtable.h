@@ -13,7 +13,6 @@ struct hashtable {
     struct hashtable_node** heads;
     size_t head_count;
     size_t size;
-    size_t key_size;
     size_t value_size;
     spinlock_t lock;
 };
@@ -26,12 +25,11 @@ struct hashtable {
  * it's important that you balance the head count and memory usage.
  *
  * @param head_count The number of heads the linked list should use
- * @param key_size The size of the keys
  * @param value_size The size of the values
  *
  * @return A pointer to the new hashtable, NULL if memory could not be allocated
  */
-struct hashtable* hashtable_create(size_t head_count, size_t key_size, size_t value_size);
+struct hashtable* hashtable_create(size_t head_count, size_t value_size);
 
 /**
  * @brief Insert a value into a hash table
@@ -46,7 +44,7 @@ struct hashtable* hashtable_create(size_t head_count, size_t key_size, size_t va
  * @retval 0 Succesful
  * @retval -ENOMEM Cannot allocate memory for new value
  */
-int hashtable_insert(struct hashtable* table, const void* key, const void* value);
+int hashtable_insert(struct hashtable* table, const void* key, size_t key_size, const void* value);
 
 /**
  * @brief Search for a value in a hash table
@@ -58,7 +56,7 @@ int hashtable_insert(struct hashtable* table, const void* key, const void* value
  * @retval 0 Successful
  * @retval -ENOENT Key not found
  */
-int hashtable_search(struct hashtable* table, const void* key, void* value);
+int hashtable_search(struct hashtable* table, const void* key, size_t key_size, void* value);
 
 /**
  * @brief Remove a value from a hashtable
@@ -69,7 +67,7 @@ int hashtable_search(struct hashtable* table, const void* key, void* value);
  * @retval 0 Successful
  * @retval -ENOENT Key not found
  */
-int hashtable_remove(struct hashtable* table, const void* key);
+int hashtable_remove(struct hashtable* table, const void* key, size_t key_size);
 
 /**
  * @brief Destroy a hashtable

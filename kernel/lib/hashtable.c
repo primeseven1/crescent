@@ -18,7 +18,7 @@ static inline u64 fnv1a64_hash(const void* bytes, size_t size) {
     return hash;
 }
 
-struct hashtable* hashtable_create(size_t head_count, size_t key_size, size_t value_size) {
+struct hashtable* hashtable_create(size_t head_count, size_t value_size) {
     if (head_count == 0)
         return NULL;
     struct hashtable* table = kmalloc(sizeof(*table), GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL);
@@ -32,7 +32,6 @@ struct hashtable* hashtable_create(size_t head_count, size_t key_size, size_t va
     }
     table->head_count = head_count;
     table->size = 0;
-    table->key_size = key_size;
     table->value_size = value_size;
     table->lock = SPINLOCK_INITIALIZER;
 
@@ -65,8 +64,8 @@ hashtable_node_create(const void* key, const void* value, size_t key_size, size_
     return node;
 }
 
-int hashtable_insert(struct hashtable* table, const void* key, const void* value) {
-    u64 hash = fnv1a64_hash(key, table->key_size);
+int hashtable_insert(struct hashtable* table, const void* key, size_t key_size, const void* value) {
+    u64 hash = fnv1a64_hash(key, key_size);
     int ret;
     
     unsigned long flags;
@@ -79,7 +78,7 @@ int hashtable_insert(struct hashtable* table, const void* key, const void* value
 
     /* See if the key is already in the table */
     while (node) {
-        if (memcmp(node->key, key, table->key_size) == 0) {
+        if (memcmp(node->key, key, key_size) == 0) {
             memcpy(node->value, value, table->value_size);
             ret = 0;
             goto out;
@@ -90,7 +89,7 @@ int hashtable_insert(struct hashtable* table, const void* key, const void* value
     }
 
     /* Since there is no matching key, another node needs to be created */
-    struct hashtable_node* new = hashtable_node_create(key, value, table->key_size, table->value_size);
+    struct hashtable_node* new = hashtable_node_create(key, value, key_size, table->value_size);
     if (!new) {
         ret = -ENOMEM;
         goto out;
@@ -108,8 +107,8 @@ out:
     return ret;
 }
 
-int hashtable_search(struct hashtable* table, const void* key, void* value) {
-    u64 hash = fnv1a64_hash(key, table->key_size);
+int hashtable_search(struct hashtable* table, const void* key, size_t key_size, void* value) {
+    u64 hash = fnv1a64_hash(key, key_size);
     int ret;
 
     unsigned long flags;
@@ -119,7 +118,7 @@ int hashtable_search(struct hashtable* table, const void* key, void* value) {
 
     const struct hashtable_node* node = table->heads[index];
     while (node) {
-        if (memcmp(node->key, key, table->key_size) == 0) {
+        if (memcmp(node->key, key, key_size) == 0) {
             memcpy(value, node->value, table->value_size);
             ret = 0;
             goto out;
@@ -134,8 +133,8 @@ out:
     return ret;
 }
 
-int hashtable_remove(struct hashtable* table, const void* key) {
-    u64 hash = fnv1a64_hash(key, table->key_size);
+int hashtable_remove(struct hashtable* table, const void* key, size_t key_size) {
+    u64 hash = fnv1a64_hash(key, key_size);
     int ret;
 
     unsigned long flags;
@@ -148,7 +147,7 @@ int hashtable_remove(struct hashtable* table, const void* key) {
 
     /* Search for the key in the table */
     while (node) {
-        if (memcmp(node->key, key, table->key_size) == 0) {
+        if (memcmp(node->key, key, key_size) == 0) {
             if (prev)
                 prev->next = node->next;
             else
