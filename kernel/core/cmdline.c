@@ -1,6 +1,7 @@
 #include <crescent/common.h>
 #include <crescent/core/cmdline.h>
 #include <crescent/core/limine.h>
+#include <crescent/core/printk.h>
 #include <crescent/mm/heap.h>
 #include <crescent/lib/hashtable.h>
 #include <crescent/lib/string.h>
@@ -18,13 +19,13 @@ const char* cmdline_get(const char* arg) {
 int cmdline_parse(void) {
     if (!g_limine_kernel_file_request.response)
         return -ENOPROTOOPT;
-    cmdline_hashtable = hashtable_create(3, sizeof(char*));
-    if (!cmdline_hashtable)
-        return -ENOMEM;
-
     const char* cmdline = g_limine_kernel_file_request.response->kernel_file->cmdline;
     if (!cmdline)
         return -ENOPROTOOPT;
+
+    cmdline_hashtable = hashtable_create(5, sizeof(char*));
+    if (!cmdline_hashtable)
+        return -ENOMEM;
 
     size_t cmdline_buf_size = strlen(cmdline) + 1;
     char* cmdline_copy = kmalloc(cmdline_buf_size, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL);
@@ -53,14 +54,22 @@ int cmdline_parse(void) {
 
         while (*cmdline_copy != ' ') {
             if (*cmdline_copy == '\0') {
-                hashtable_insert(cmdline_hashtable, key, strlen(key), &value);
+                int err = hashtable_insert(cmdline_hashtable, key, strlen(key), &value);
+                if (err) {
+                    printk(PL_ERR "Error inserting cmdline argument into hashtable (errno %i)\n", err);
+                    return err;
+                }
                 return 0;
             }
             cmdline_copy++;
         }
 
         *cmdline_copy = '\0';
-        hashtable_insert(cmdline_hashtable, key, strlen(key), &value);
+        int err = hashtable_insert(cmdline_hashtable, key, strlen(key), &value);
+        if (err) {
+            printk(PL_ERR "Error inserting cmdline argument into hashtable (errno %i)\n", err);
+            return err;
+        }
         cmdline_copy++;
     }
 
