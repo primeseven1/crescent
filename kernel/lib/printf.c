@@ -15,7 +15,7 @@ static int printf_char(char* dest, char c, size_t dsize) {
 
 static int printf_string(char* dest, const char* s, size_t dsize) {
     size_t char_count;
-    if (dest)
+    if (s)
         char_count = strlcat(dest, s, dsize);
     else
         char_count = strlcat(dest, "(null)", dsize);
