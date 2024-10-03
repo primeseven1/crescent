@@ -567,7 +567,7 @@ int kmprotect(void* virtual, size_t size, unsigned long mmu_flags) {
     bool huge_page = vm_is_huge_page(vm_ctx, virtual);
     size_t page_size = huge_page ? 0x200000 : 0x1000;
 
-    unsigned long page_count = (uintptr_t)virtual & (page_size - 1) ? size / page_size + 1 : size / page_size;
+    unsigned long page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
     return vm_change_pt_flags(vm_ctx, virtual, pt_flags, page_count);
 }
 
