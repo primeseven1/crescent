@@ -96,45 +96,23 @@ isr_common:
 	pushq %rax
     movq %cr2, %rax
     pushq %rax
-    subq $16, %rsp /* room for fxsave pointer + padding */
 
-    /* Move this into rdi as a parameter for _do_isr */
+    /* Parameter for _do_isr */
     movq %rsp, %rdi
 
     /* 
-     * Align the stack since fxsave requires a 16-aligned stack, 
-     * use rbx since it's a preserved register in the system-v abi 
+     * Force align the stack if it isn't already, use rbx since 
+     * it's a saved register in the system-v abi 
      */
     movq %rsp, %rbx
     andq $15, %rbx
-
     subq %rbx, %rsp
-    subq $512, %rsp
-    fxsave (%rsp)
-
-    /* store the pointer to the fxsave region at this location */
-    leaq 512(%rsp, %rbx), %rax
-    movq %rsp, (%rax)
-
-    /* 
-     * Set the mxcsr and fcw registers to what it usually is for the kernel context,
-     * it's important to do this only AFTER fxsave happens
-     */
-    subq $8, %rsp
-    fninit
-    movw $0x037F, (%rsp)
-    fldcw (%rsp)
-    movq $0x01F80, (%rsp)
-    ldmxcsr (%rsp)
-    addq $8, %rsp
 
     call _do_isr
 
-    fxrstor (%rsp)
-    addq $512, %rsp
-    addq %rbx, %rsp
+    /* If the stack wasn't aligned before the _do_isr call, we need to restore it */
+    addq %rsp, %rbx
 
-    addq $16, %rsp
     popq %rax
     movq %rax, %cr2
     popq %rax

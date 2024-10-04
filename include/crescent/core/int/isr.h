@@ -3,8 +3,6 @@
 #include <crescent/types.h>
 
 struct ctx {
-    u8* fxsave_region;
-    u64 _pad;
     void* cr2;
     u64 rax;
     u64 rbx;
