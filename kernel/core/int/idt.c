@@ -49,17 +49,8 @@ static void (*const isr_table[256])(void) = {
 
 static bool initialized = false;
 
-static inline void idt_load(void) {
-    struct {
-        u16 limit;
-        struct idt_entry* idt_ptr;
-    } __attribute__((packed)) idtr = {
-        .limit = sizeof(idt_entries) - 1,
-        .idt_ptr = idt_entries
-    };
-
-    __asm__ volatile("lidt %0" : : "m"(idtr) : "memory");
-}
+__attribute__((sysv_abi))
+void asm_idt_load(struct idt_entry* entries, size_t size);
 
 void idt_init(void) {
     memset(idt_entries, 0, sizeof(idt_entries));
@@ -78,6 +69,6 @@ void idt_init(void) {
         initialized = true;
     }
 
-    idt_load();
+    asm_idt_load(idt_entries, sizeof(idt_entries));
     printk("IDT loaded on processor %u\n", _cpu()->processor_id);
 }

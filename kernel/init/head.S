@@ -21,7 +21,7 @@ asm_gdt_load:
     subq $16, %rsp
 
     /* si contains the size of the GDT, it must be subtracted by 1 */
-    subq $1, %si
+    subw $1, %si
     movw %si, (%rsp)
     movq %rdi, 2(%rsp)
     lgdt (%rsp)
@@ -48,3 +48,18 @@ asm_gdt_load:
     ltr %ax
     ret
 .size asm_gdt_load, . - asm_gdt_load
+
+.globl asm_idt_load
+.type asm_idt_load, @function
+asm_idt_load:
+    subq $16, %rsp
+
+    /* Like with the GDT, the size must be subtracted by 1 */
+    subw $1, %si
+    movw %si, (%rsp)
+    movq %rdi, 2(%rsp)
+    lidt (%rsp)
+
+    addq $16, %rsp
+    ret
+.size asm_idt_load, . - asm_idt_load
