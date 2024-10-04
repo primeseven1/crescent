@@ -42,43 +42,12 @@ static const struct segment_descriptor base[6] = {
     }
 };
 
-/* Load the GDT with the assembly instruction */
-static inline void gdt_load(struct kernel_segments* segments) {
-    struct {
-        u16 limit;
-        struct kernel_segments* segments;
-    } __attribute__((packed)) gdtr = {
-        .limit = sizeof(*segments) - 1,
-        .segments = segments
-    };
-
-    __asm__ volatile("lgdt %0" : : "m"(gdtr) : "memory");
-}
-
-/* Load the TSS with the assembly instruction */
-static inline void tss_load(void) {
-    __asm__ volatile("ltr %0" : : "r"((u16)SEGMENT_TASK_STATE) : "memory");
-}
-
-static void reload_segment_regs(void) {
-    __asm__ volatile("swapgs\n\t"
-            "movw $0, %%ax\n\t"
-            "movw %%ax, %%gs\n\t"
-            "movw %%ax, %%fs\n\t"
-            "swapgs\n\t"
-            "movw $0x10, %%ax\n\t"
-            "movw %%ax, %%ds\n\t"
-            "movw %%ax, %%es\n\t"
-            "movw %%ax, %%ss\n\t"
-            "pushq $0x8\n\t"
-            "leaq .reload(%%rip), %%rax\n\t"
-            "pushq %%rax\n\t"
-            "lretq\n\t"
-            ".reload:"
-            :
-            :
-            : "rax", "memory");
-}
+/*
+ * This function takes a size since the assembly doesn't know the size of the GDT, 
+ * and this also prevents problems if the size changes for some reason 
+ */
+__attribute__((sysv_abi))
+void asm_gdt_load(struct kernel_segments* segments, size_t size);
 
 void segments_init(void) {
     int errno;
@@ -140,9 +109,6 @@ void segments_init(void) {
     segments->tss.base_top = (uintptr_t)tss >> 32;
     segments->tss.reserved = 0;
 
-    gdt_load(segments);
-    reload_segment_regs();
-    tss_load();
-
+    asm_gdt_load(segments, sizeof(*segments));
     printk("GDT Loaded on processor %u\n", _cpu()->processor_id);
 }
