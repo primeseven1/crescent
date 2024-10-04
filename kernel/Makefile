@@ -6,7 +6,7 @@ CFLAGS = -c -MMD -MP -std=c11 -I../include \
 		 -Wall -Wextra -Wshadow -Wpointer-arith \
 		 -Wstrict-prototypes -Wmissing-prototypes \
 		 -Wvla -Walloca -Winline -Waggregate-return \
-		 -mno-red-zone
+		 -mno-red-zone -mgeneral-regs-only
 LDFLAGS = -static -nostdlib --no-dynamic-linker \
 		  -pie -ztext -zmax-page-size=0x1000
 
