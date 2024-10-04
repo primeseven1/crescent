@@ -30,16 +30,3 @@ int klltostr(char* dest, long long val, int base, size_t dsize);
  * @retval -EOVERFLOW Cannot fit the whole string inside the buffer
  */
 int kulltostr(char* dest, unsigned long long val, int base, size_t dsize);
-
-/**
- * @brief Convert a double to a string
- *
- * @param dest Where to put the string
- * @param val The value to convert
- * @param afterpoint The number of characters after the decimal point
- * @param dsize The size of the destination buffer
- *
- * @retval 0 Success
- * @retval -EOVERFLOW Cannot fit the whole string inside the buffer
- */
-int kdbltostr(char* dest, double val, unsigned int afterpoint, size_t dsize);
