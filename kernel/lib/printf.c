@@ -62,16 +62,6 @@ static int printf_uint(char* dest, unsigned long long x, int base, size_t dsize,
     return err;
 }
 
-static int printf_dbl(char* dest, double x, int afterpoint, size_t dsize) {
-    size_t len = strlen(dest);
-    if (len >= dsize)
-        return -EOVERFLOW;
-
-    dest += len;
-    dsize -= len;
-    return kdbltostr(dest, x, afterpoint, dsize);
-}
-
 int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
     *buf = '\0';
 
@@ -111,9 +101,6 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
             if (err)
                 return err;
             err = printf_uint(buf, (unsigned long long)va_arg(va, void*), 16, bufsize, false);
-            break;
-        case 'f':
-            err = printf_dbl(buf, (float)va_arg(va, double), 5, bufsize);
             break;
         case 's':
             err = printf_string(buf, va_arg(va, const char*), bufsize);
@@ -181,9 +168,6 @@ int vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list va) {
                 break;
             case 'o':
                 err = printf_uint(buf, va_arg(va, unsigned long), 8, bufsize, false);
-                break;
-            case 'f':
-                err = printf_dbl(buf, va_arg(va, double), 10, bufsize);
                 break;
             case 'l':
                 switch (*++fmt) {
