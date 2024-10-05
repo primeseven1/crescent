@@ -87,31 +87,37 @@ static struct vm_ctx** all_cpu_vm_ctx = NULL;
 /* Lock for the kernel address space, since all pages for the kernel address space are shared */
 static spinlock_t kas_lock = SPINLOCK_INITIALIZER;
 
-static bool is_huge_page(struct vm_ctx* ctx, void* virtaddr) {
+static int is_huge_page(struct vm_ctx* ctx, void* virtaddr) {
+    if (!is_virtaddr_canonical(virtaddr))
+        return -EFAULT;
+
     unsigned long* pml4, *pdpt, *pd;
     u16 pml4_i, pdpt_i, pd_i;
 
     pml4 = ctx->ctx;
     pml4_i = ((uintptr_t)virtaddr >> 39) & 0x01FF;
     if (!(pml4[pml4_i] & PT_PRESENT))
-        return false;
+        return -ENOENT;
 
     pdpt = get_table_virtaddr(pml4[pml4_i]);
     pdpt_i = ((uintptr_t)virtaddr >> 30) & 0x01FF;
     if (!(pdpt[pdpt_i] & PT_PRESENT))
-        return false;
+        return -ENOENT;
 
     pd = get_table_virtaddr(pdpt[pdpt_i]);
     pd_i = ((uintptr_t)virtaddr >> 21) & 0x01FF;
     if (!(pd[pd_i] & PT_PRESENT))
-        return false;
+        return -ENOENT;
     if (pd[pd_i] & PT_LARGE)
-        return true;
+        return 1;
 
-    return false;
+    return 0;
 }
 
 static void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr) {
+    if (!is_virtaddr_canonical(virtaddr))
+        return NULL;
+
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
@@ -144,6 +150,11 @@ static void* get_physaddr(struct vm_ctx* ctx, const void* virtaddr) {
 }
 
 static int map_page(struct vm_ctx* ctx, void* virtaddr, void* physaddr, unsigned long pt_flags) {
+    if (!is_virtaddr_canonical(virtaddr) || !is_physaddr_canonical(physaddr))
+        return -EFAULT;
+    if (!is_flags_valid(pt_flags))
+        return -EINVAL;
+
     unsigned long* pml4, *pdpt, *pd, *pt; 
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
@@ -238,6 +249,11 @@ err:
 }
 
 static int change_pt_flags(struct vm_ctx* ctx, void* virtaddr, unsigned long pt_flags) {
+    if (!is_virtaddr_canonical(virtaddr))
+        return -EFAULT;
+    if (!is_flags_valid(pt_flags))
+        return -EINVAL;
+
     unsigned long* pml4, *pdpt, *pd, *pt; 
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
@@ -277,6 +293,9 @@ static int change_pt_flags(struct vm_ctx* ctx, void* virtaddr, unsigned long pt_
 }
 
 static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
+     if (!is_virtaddr_canonical(virtaddr))
+        return -EFAULT;
+
     unsigned long* pml4, *pdpt, *pd, *pt;
     u16 pml4_i, pdpt_i, pd_i, pt_i;
 
@@ -313,10 +332,7 @@ static int unmap_page(struct vm_ctx* ctx, void* virtaddr) {
     return 0;
 }
 
-bool vm_is_huge_page(struct vm_ctx* ctx, void* virtual) {
-    if (!is_virtaddr_canonical(virtual))
-        return false;
-
+int vm_is_huge_page(struct vm_ctx* ctx, void* virtual) {
     bool ret;
     unsigned long lock_flags;
 
@@ -335,9 +351,6 @@ bool vm_is_huge_page(struct vm_ctx* ctx, void* virtual) {
 }
 
 void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
-    if (!is_virtaddr_canonical(virtual))
-        return NULL;
-
     void* ret;
     unsigned long lock_flags;
 
@@ -357,11 +370,6 @@ void* vm_get_physaddr(struct vm_ctx* ctx, void* virtual) {
 
 static int vm_map_pages(struct vm_ctx* ctx, void* virtual, 
         void* physical, unsigned long pt_flags, unsigned long count) {
-    if (!is_virtaddr_canonical(virtual) || !is_physaddr_canonical(physical))
-        return -EFAULT;
-    if (!is_flags_valid(pt_flags))
-        return -EINVAL;
-
     int err = 0;
     unsigned long lock_flags;
     size_t page_size = pt_flags & PT_LARGE ? 0x200000 : 0x1000;
@@ -397,12 +405,8 @@ static int vm_map_pages(struct vm_ctx* ctx, void* virtual,
     return err;
 }
 
-static int vm_change_pt_flags(struct vm_ctx* ctx, void* virtual, unsigned long pt_flags, unsigned long count) {
-    if (!is_virtaddr_canonical(virtual))
-        return -EFAULT;
-    if (!is_flags_valid(pt_flags))
-        return -EINVAL;
-
+static int vm_change_pt_flags(struct vm_ctx* ctx, 
+        void* virtual, unsigned long pt_flags, unsigned long count) {
     int err = 0;
     unsigned long lock_flags;
     size_t page_size = pt_flags & PT_LARGE ? 0x200000 : 0x1000;
@@ -416,7 +420,7 @@ static int vm_change_pt_flags(struct vm_ctx* ctx, void* virtual, unsigned long p
     while (count) {
         err = change_pt_flags(ctx, virtual, pt_flags);
         if (err) {
-            printk(PL_CRIT "vm_change_pt_flags: Failed to change pt flags on all pages (remaining: %lu, errno: %i)", 
+            printk(PL_ERR "mm: Failed to change pt flags on all pages (remaining: %lu, errno: %i)", 
                     count, err);
             break;
         }
@@ -433,9 +437,6 @@ static int vm_change_pt_flags(struct vm_ctx* ctx, void* virtual, unsigned long p
 }
 
 static int vm_unmap_pages(struct vm_ctx* ctx, void* virtual, unsigned long count) {
-     if (!is_virtaddr_canonical(virtual))
-        return -EFAULT;
-
     int err = 0;
     unsigned long lock_flags;
 
@@ -449,7 +450,7 @@ static int vm_unmap_pages(struct vm_ctx* ctx, void* virtual, unsigned long count
     while (count) {
         err = unmap_page(ctx, virtual);
         if (err) {
-            printk(PL_CRIT "vm_unmap_pages: There still may be some mapped pages (remaining: %lu, errno: %i)\n", 
+            printk(PL_WARN "mm: There still may be some mapped pages (remaining: %lu, errno: %i)\n",
                     count, err);
             break;
         }
@@ -510,9 +511,13 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
     void* saved_virtual = virtual;
 
     if (flags & KMMAP_PHYS) {
-        *errno = vm_map_pages(vm_ctx, virtual, private, pt_flags, page_count);
-        if (*errno == 0)
-            return virtual;
+        if (private < (void*)0x1000 || (gfp_flags & GFP_VM_LARGE_PAGE && private < (void*)0x200000)) {
+            *errno = -EINVAL;
+        } else {
+            *errno = vm_map_pages(vm_ctx, virtual, private, pt_flags, page_count);
+            if (*errno == 0)
+                return virtual;
+        }
     } else if (flags & KMMAP_ALLOC) {
         gfp_t gfp_phys = gfp_flags & GFP_PM_FLAGS_MASK;
         unsigned int page_size_order = get_order(page_size); 
@@ -542,7 +547,7 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
             virtual = (u8*)virtual - page_size;
             void* physical = vm_get_physaddr(vm_ctx, virtual);
             if (unlikely(!physical)) {
-                printk(PL_ERR "vm_get_physaddr returned NULL in error handling\n");
+                printk(PL_ERR "mm: vm_get_physaddr returned NULL in error handling in %s\n", __func__);
                 continue;
             }
 
@@ -563,9 +568,16 @@ int kmprotect(void* virtual, size_t size, unsigned long mmu_flags) {
         return -EINVAL;
 
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
+    size_t page_size;
 
-    bool huge_page = vm_is_huge_page(vm_ctx, virtual);
-    size_t page_size = huge_page ? 0x200000 : 0x1000;
+    /* If this is negative, it's an error code */
+    int huge_page = vm_is_huge_page(vm_ctx, virtual);
+    if (huge_page < 0)
+        return huge_page;
+    else if (huge_page == 0)
+        page_size = 0x1000;
+    else
+        page_size = 0x200000;
 
     unsigned long page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
     return vm_change_pt_flags(vm_ctx, virtual, pt_flags, page_count);
@@ -582,22 +594,27 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
 
     size_t page_size = is_huge_page(vm_ctx, virtual) ? 0x200000 : 0x1000;
     unsigned int page_size_order = get_order(page_size);
-    size_t page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
+    unsigned long page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
 
     if (flags & KMMAP_PHYS) {
         int err = vm_unmap_pages(vm_ctx, virtual, page_count);
         if (err)
             return err;
     } else if (flags & KMMAP_ALLOC) {
-        while (page_count--) {
+        while (page_count) {
             void* physical = vm_get_physaddr(vm_ctx, virtual);
             if (unlikely(!physical))
                 return -EADDRNOTAVAIL;
             int err = vm_unmap_pages(vm_ctx, virtual, 1);
-            if (err)
+            if (err) {
+                printk(PL_WARN "mm: Failed to unmap all pages in %s (err %i, remaining: %lu)\n", 
+                        __func__, err, page_count);
                 return err;
+            }
+
             free_pages(physical, page_size_order);
             virtual = (u8*)virtual + page_size;
+            page_count--;
         }
     }
 
@@ -607,7 +624,7 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
 
 void mmap_init(void) {
     struct limine_paging_mode_response* mode = g_limine_paging_mode_request.response;
-    if (!mode) {
+    if (unlikely(!mode)) {
         u32 ecx, unused;
         cpuid(0x07, 0, &unused, &unused, &ecx, &unused);
         if (ecx & (1 << 16)) {

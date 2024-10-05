@@ -47,10 +47,12 @@ void mmap_init(void);
  * @param ctx The virtual memory context to use
  * @param virtual The virtual address to check
  *
- * @retval true The page is a 2MiB page
- * @retval false The page is a 4K page
+ * @retval 0 Page is a 4K page
+ * @retval 1 Page is a 2MiB page
+ * @retval -EFAULT Bad virtual address
+ * @retval -ENOENT Page table entry not present
  */
-bool vm_is_huge_page(struct vm_ctx* ctx, void* virtual);
+int vm_is_huge_page(struct vm_ctx* ctx, void* virtual);
 
 /**
  * @brief Get the physical address of a virtual address
