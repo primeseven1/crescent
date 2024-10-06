@@ -70,5 +70,5 @@ void idt_init(void) {
     }
 
     asm_idt_load(idt_entries, sizeof(idt_entries));
-    printk("IDT loaded on processor %u\n", _cpu()->processor_id);
+    printk("core: int: IDT loaded on processor %u\n", _cpu()->processor_id);
 }
