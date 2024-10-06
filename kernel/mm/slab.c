@@ -140,7 +140,7 @@ void* slab_cache_alloc(struct slab_cache* cache) {
 
     ret = slab_take(cache, slab);
     if (unlikely(!ret)) {
-        printk(PL_CRIT "Failed to allocate slab even though the cache should have been big enough");
+        printk(PL_ERR "mm: slab_take failed even though the slab should have been big enough\n");
         goto out;
     }
 
@@ -181,7 +181,7 @@ void slab_cache_free(struct slab_cache* cache, void* obj) {
 
     struct slab* slab = slab_release(cache, obj);
     if (!slab) {
-        printk(PL_ERR "slab_release returned NULL, invalid object? obj: %p\n", obj);
+        printk(PL_ERR "mm: slab_release returned NULL, invalid object? obj: %p\n", obj);
         goto out;
     }
 

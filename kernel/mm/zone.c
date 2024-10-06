@@ -412,19 +412,19 @@ void* alloc_pages(gfp_t gfp_flags, unsigned int order) {
 
 void free_pages(void* addr, unsigned int order) {
     if (unlikely(addr < (void*)0x1000)) {
-        printk(PL_ERR "free_pages tried to free the first page of physical memory!\n");
+        printk(PL_ERR "mm: %s tried to free the first page of physical memory!\n", __func__);
         return;
     }
 
     struct zone* zone = get_zone_from_addr(addr);
     if (!zone) {
-        printk(PL_ERR "free_pages failed to get the zone type! (%p)\n", addr);
+        printk(PL_ERR "mm: %s failed to get the zone type! (%p)\n", __func__, addr);
         return;
     }
 
     int err = _free_pages(zone, addr, order);
     if (err)
-        printk(PL_ERR "_free_pages failed to free pages from the memory zone! err: %i\n", err);
+        printk(PL_ERR "mm: _free_pages failed to free pages from the memory zone! err: %i\n", err);
 }
 
 static void memory_zone_init(struct zone* zone, void* base, 
@@ -548,7 +548,7 @@ void memory_zones_init(void) {
 
     zone_size = dma32_zone_init(base, total_mem);
     if (unlikely(zone_size == 0)) {
-        printk("Initialized physical memory zones: DMA\n");
+        printk("mm: Initialized physical memory zones: DMA\n");
         return;
     }
 
@@ -557,7 +557,7 @@ void memory_zones_init(void) {
 
     normal_zone_init(base, total_mem);
     if (dma32_zone == normal_zone)
-        printk("Initialized physical memory zones: DMA, DMA32\n");
+        printk("mm: Initialized physical memory zones: DMA, DMA32\n");
     else
-        printk("Initialized physical memory zones: DMA, DMA32, Normal\n");
+        printk("mm: Initialized physical memory zones: DMA, DMA32, Normal\n");
 }

@@ -637,5 +637,5 @@ void mmap_init(void) {
         panic("Wrong paging mode selected by the loader!");
     }
 
-    printk("Initialized virtual memory mapping\n");
+    printk("mm: Initialized virtual memory mapping\n");
 }

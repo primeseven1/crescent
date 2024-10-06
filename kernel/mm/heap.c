@@ -112,8 +112,8 @@ void* krealloc(void* addr, size_t new_size, gfp_t gfp_flags) {
     } else {
         int errno = kmunmap(old_alloc_info, old_size + alloc_info_size, KMMAP_ALLOC);
         if (unlikely(errno))
-            printk(PL_CRIT "There was an error unmapping the heap memory (addr %p), how did this happen? (err: %i)\n", 
-                    addr, errno);
+            printk(PL_CRIT "mm: Error unmapping heap memory in function %s (addr %p), how did this happen? (err: %i)\n", 
+                    __func__, addr, errno);
     }
 
     return ret;
@@ -134,10 +134,10 @@ void kfree(void* addr) {
     if (cache) {
         slab_cache_free(cache, alloc_info);
     } else {
-        int err = kmunmap(alloc_info, alloc_size + alloc_info_size, KMMAP_ALLOC);
-        if (unlikely(err))
-            printk(PL_CRIT "There was an error unmapping the heap memory (addr %p), how did this happen? (err: %i)\n", 
-                    addr, err);
+        int errno = kmunmap(alloc_info, alloc_size + alloc_info_size, KMMAP_ALLOC);
+        if (unlikely(errno))
+            printk(PL_CRIT "mm: Error unmapping heap memory in function %s (addr %p), how did this happen? (err: %i)\n", 
+                    __func__, addr, errno);
     }
 }
 

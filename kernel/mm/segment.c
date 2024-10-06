@@ -110,5 +110,5 @@ void segments_init(void) {
     segments->tss.reserved = 0;
 
     asm_gdt_load(segments, sizeof(*segments));
-    printk("GDT Loaded on processor %u\n", _cpu()->processor_id);
+    printk("mm: GDT Loaded on processor %u\n", _cpu()->processor_id);
 }

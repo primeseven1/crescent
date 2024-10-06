@@ -230,8 +230,8 @@ void* alloc_vpages(gfp_t gfp_flags, unsigned int order) {
                     break;
             }
 
-            printk("Resized virtual memory zone (base %p) by %lu pages\n", 
-                    zone->area.base, resize_count);
+            printk("mm: %s Resized virtual memory zone (base %p) by %lu pages\n", 
+                    __func__, zone->area.base, resize_count);
             ret = _alloc_vpages(zone, page_count, large_page);
             if (ret)
                 goto out;
@@ -251,7 +251,8 @@ void free_vpages(void* addr, unsigned int order) {
     unsigned long unused_index;
     struct vm_zone* zone = get_vm_zone_addr(addr, &unused_index);
     if (!zone) {
-        printk(PL_ERR "Failed to get virtual memory zone from address %p!\n", addr);
+        printk(PL_ERR "mm: %s Failed to get virtual memory zone from address %p!\n", 
+                __func__, addr);
         return;
     }
 
@@ -266,19 +267,19 @@ void free_vpages(void* addr, unsigned int order) {
     if (zone->page_count > 512 && are_last_n_pages_free(zone, 512)) {
         long s_zone_page_count = (long)zone->page_count;
         if (s_zone_page_count < 0) {
-            printk(PL_ERR "Tried to shrink the virtual memory zone at base %p, but there was signed integer overflow\n",
-                    zone->area.base);
+            printk(PL_ERR "mm: %s Tried to shrink the virtual memory zone at base %p, but there was signed integer overflow\n",
+                    __func__, zone->area.base);
             goto out;
         }
 
         long count = -512;
         int err = resize_vm_zone(zone, count);
         if (!err)
-            printk("Resized virtual memory zone (base %p) by %li pages\n",
-                    zone->area.base, count);
+            printk("mm: %s Resized virtual memory zone (base %p) by %li pages\n",
+                    __func__, zone->area.base, count);
         else
-            printk(PL_ERR "Error when resizing memory zone (base %p) err: %i\n", 
-                    zone->area.base, err);
+            printk(PL_ERR "mm: %s Error when resizing memory zone (base %p) err: %i\n", 
+                    __func__, zone->area.base, err);
     }
 
 out:
@@ -319,5 +320,5 @@ void vm_zones_init(void) {
         kernel_vm_zones[i].lock = SPINLOCK_INITIALIZER;
     }
 
-    printk("Initialized virtual memory zones, ranges reserved by loader: %zu\n", present_count);
+    printk("mm: Initialized virtual memory zones, ranges reserved by loader: %zu\n", present_count);
 }
