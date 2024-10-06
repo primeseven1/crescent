@@ -73,7 +73,7 @@ int cmdline_parse(void) {
                 /* This is it for the command line arguments, so add the final value into the hashtable and exit */
                 int err = hashtable_insert(cmdline_hashtable, key, strlen(key), &value);
                 if (err) {
-                    printk(PL_ERR "Error inserting cmdline argument into hashtable (errno %i)\n", err);
+                    printk(PL_ERR "core: Error inserting cmdline argument into hashtable (errno %i)\n", err);
                     return err;
                 }
                 return 0;
@@ -85,7 +85,7 @@ int cmdline_parse(void) {
         *cmdline_copy = '\0';
         int err = hashtable_insert(cmdline_hashtable, key, strlen(key), &value);
         if (err) {
-            printk(PL_ERR "Error inserting cmdline argument into hashtable (errno %i)\n", err);
+            printk(PL_ERR "core: Error inserting cmdline argument into hashtable (errno %i)\n", err);
             return err;
         }
         cmdline_copy++;
@@ -94,6 +94,6 @@ int cmdline_parse(void) {
     /* Now just remap as read only */
     errno = kmprotect(cmdline_copy, cmdline_size, MMU_READ);
     if (errno)
-        printk(PL_ERR "Failed to remap command line arguments as read only!\n");
+        printk(PL_ERR "core: Failed to remap command line arguments as read only!\n");
     return 0;
 }
