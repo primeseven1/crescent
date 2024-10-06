@@ -15,7 +15,7 @@ static void print_stack_trace(void) {
     void** stack_frame = __builtin_frame_address(0);
 
     size_t kernel_offset = (uintptr_t)&_lds_kernel_start - KERNEL_MIN_VIRTADDR;
-    printk(PL_EMERG "--- Stack trace (kernel offset: 0x%lx) --- \n", kernel_offset);
+    printk(PL_EMERG "Stack trace (kernel offset: 0x%lx):\n", kernel_offset);
     for (int i = 0; i < 10; i++) {
         if (!stack_frame)
             break;
@@ -38,13 +38,17 @@ static void print_stack_trace(void) {
     }
 }
 
-static void print_registers(void) {
+static void print_processor_state(struct cpu* cpu) {
     u64 rsp, rbp;
     u64 cr0, cr2, cr3, cr4;
     u64 fs, gs, krnlgs;
     u64 cs, ds, es;
     u64 rflags;
 
+    /* 
+     * No reason in printing general purpose registers,
+     * since those registers are likely already trashed
+     */
     __asm__("movq %%rsp, %0\n\t"
             "movq %%rbp, %1\n\t"
             : "=rm"(rsp), "=rm"(rbp));
@@ -62,7 +66,7 @@ static void print_registers(void) {
             : "=r"(cs), "=r"(ds), "=r"(es)); 
     rflags = read_cpu_flags();
 
-    printk(PL_EMERG "--- Registers ---\n");
+    printk(PL_EMERG "Processor %u state: \n", cpu->processor_id);
     printk(PL_EMERG " RSP: 0x%lx, RBP: 0x%lx\n", rsp, rbp);
     printk(PL_EMERG " CR0: 0x%lx, CR2: 0x%lx, CR3: 0x%lx, CR4: 0x%lx\n", cr0, cr2, cr3, cr4);
     printk(PL_EMERG " FS: 0x%lx, GS: 0x%lx, KRNLGS: 0x%lx\n", fs, gs, krnlgs);
@@ -70,17 +74,8 @@ static void print_registers(void) {
     printk(PL_EMERG " RFLAGS: 0x%lx\n", rflags);
 }
 
-static inline void idt_load_null(void) {
-    struct {
-        u16 limit;
-        void* idt_ptr;
-    } __attribute__((packed)) idtr = {
-        .limit = 0,
-        .idt_ptr = NULL
-    };
-
-    __asm__ volatile("lidt %0" : : "m"(idtr) : "memory");
-}
+__attribute__((sysv_abi))
+void asm_idt_load(void* entries, size_t size);
 
 _Noreturn void panic(const char* fmt, ...) {
     static char buf[512];
@@ -92,7 +87,7 @@ _Noreturn void panic(const char* fmt, ...) {
      * happens, the system just triple faults.
      */
     local_irq_disable();
-    idt_load_null();
+    asm_idt_load(NULL, 0);
 
     /* Unlikely that 2 threads will call panic at the same time, but it could happen */
     spinlock_lock(&lock);
@@ -114,10 +109,10 @@ _Noreturn void panic(const char* fmt, ...) {
     }
 
     vsnprintf(buf, sizeof(buf), fmt, va);
-    printk(PL_EMERG "----- [ Kernel panic (processor %u) - %s ] -----\n", cpu->processor_id, buf);
-    print_registers();
+    printk(PL_EMERG "--- [ Kernel panic - %s ] ---\n", buf);
+    print_processor_state(cpu);
     print_stack_trace();
-    printk(PL_EMERG "----- [ End kernel panic (processor %u) - %s ] -----\n", cpu->processor_id, buf);
+    printk(PL_EMERG "--- [ End kernel panic - %s ] ---\n", buf);
 
     va_end(va);
     while (1)
