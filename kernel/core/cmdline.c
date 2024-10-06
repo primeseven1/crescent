@@ -9,6 +9,9 @@
 static struct hashtable* cmdline_hashtable = NULL;
 
 const char* cmdline_get(const char* arg) {
+    if (!cmdline_hashtable)
+        return NULL;
+
     const char* ret;
     int err = hashtable_search(cmdline_hashtable, arg, strlen(arg), &ret);
     if (err)
@@ -23,29 +26,32 @@ int cmdline_parse(void) {
     if (!cmdline)
         return -ENOPROTOOPT;
 
+    size_t cmdline_size = strlen(cmdline);
+    if (cmdline_size == 0)
+        return 0;
+    cmdline_size++;
+
     cmdline_hashtable = hashtable_create(5, sizeof(char*));
     if (!cmdline_hashtable)
         return -ENOMEM;
 
     /* 
-     * Since we don't want to modify the command line string the loader gives us, 
-     * copy it over to another area of memory. This memory will never be freed.
-     * Use kmmap so the memory can be safely marked as read only after we're done
+     * Don't want to modify the cmdline directly, so make a copy of it. Use kmmap over kmalloc
+     * since after we're done parsing, the memory becomes read only.
      */
     int errno;
-    size_t cmdline_buf_size = strlen(cmdline) + 1;
-    char* cmdline_copy = kmmap(NULL, cmdline_buf_size, KMMAP_ALLOC, 
+    char* cmdline_copy = kmmap(NULL, cmdline_size, KMMAP_ALLOC, 
             MMU_READ | MMU_WRITE, GFP_VM_KERNEL | GFP_PM_ZONE_NORMAL, NULL, &errno);
     if (!cmdline_copy)
         return errno;
-    strlcpy(cmdline_copy, cmdline, cmdline_buf_size);
+    strcpy(cmdline_copy, cmdline);
 
     const char* key;
     const char* value;
 
     while (*cmdline_copy) {
         while (*cmdline_copy == ' ')
-            cmdline++;
+            cmdline_copy++;
         if (*cmdline_copy == '\0')
             return 0;
 
@@ -86,7 +92,7 @@ int cmdline_parse(void) {
     }
 
     /* Now just remap as read only */
-    errno = kmprotect(cmdline_copy, cmdline_buf_size, MMU_READ);
+    errno = kmprotect(cmdline_copy, cmdline_size, MMU_READ);
     if (errno)
         printk(PL_ERR "Failed to remap command line arguments as read only!\n");
     return 0;
