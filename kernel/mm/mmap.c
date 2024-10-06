@@ -510,6 +510,15 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     void* saved_virtual = virtual;
 
+    /*
+     * If the KMMAP_PHYS flag is set, that means the user does not want to
+     * allocate new physical pages, but use existing ones, so do not allocate
+     * any physical pages.
+     *
+     * If the KMMAP_ALLOC flag is set, then that means the user does not care
+     * about what physical address the virtual address maps to, so allocate physical
+     * pages when allocating memory.
+     */
     if (flags & KMMAP_PHYS) {
         if (private < (void*)0x1000 || (gfp_flags & GFP_VM_LARGE_PAGE && private < (void*)0x200000)) {
             *errno = -EINVAL;
@@ -592,10 +601,28 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
     struct vm_ctx* vm_ctx = &_cpu()->vm_ctx;
     unsigned int order = get_order(size);
 
-    size_t page_size = is_huge_page(vm_ctx, virtual) ? 0x200000 : 0x1000;
+    size_t page_size;
+
+    /* If negative, it's an error code */
+    int huge_page = vm_is_huge_page(vm_ctx, virtual) ? 0x200000 : 0x1000;
+    if (huge_page < 0)
+        return huge_page;
+    else if (huge_page == 0)
+        page_size = 0x1000;
+    else
+        page_size = 0x200000;
+
     unsigned int page_size_order = get_order(page_size);
     unsigned long page_count = size & (page_size - 1) ? size / page_size + 1 : size / page_size;
 
+    /* 
+     * If KMMAP_PHYS is set, then don't free the physical pages, as the user
+     * manually put the physical address into kmmap.
+     *
+     * If KMMAP_ALLOC is set, then free the physical pages. However these physical
+     * pages are probably non-contiguous, so get the physical address of each page
+     * and free them induvidually.
+     */
     if (flags & KMMAP_PHYS) {
         int err = vm_unmap_pages(vm_ctx, virtual, page_count);
         if (err)
@@ -607,7 +634,7 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
                 return -EADDRNOTAVAIL;
             int err = vm_unmap_pages(vm_ctx, virtual, 1);
             if (err) {
-                printk(PL_WARN "mm: Failed to unmap all pages in %s (err %i, remaining: %lu)\n", 
+                printk(PL_WARN "mm: Failed to unmap all pages in %s (err: %i, remaining: %lu)\n", 
                         __func__, err, page_count);
                 return err;
             }
@@ -623,9 +650,16 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
 }
 
 void mmap_init(void) {
+    u32 edx, ecx, unused;
+
+    /* Make sure the NX bit is supported by the processor */
+    cpuid(CPUID_EXT_LEAF_FEATURE_BITS, 0, &unused, &unused, &unused, &edx);
+    if (!(edx & (1 << 20)))
+        panic("NX bit not supported by the processor");
+
+    /* Now make sure the paging mode is correct */
     struct limine_paging_mode_response* mode = g_limine_paging_mode_request.response;
     if (unlikely(!mode)) {
-        u32 ecx, unused;
         cpuid(0x07, 0, &unused, &unused, &ecx, &unused);
         if (ecx & (1 << 16)) {
             u64 cr4;
