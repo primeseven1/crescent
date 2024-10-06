@@ -53,7 +53,7 @@ static void check_cpu_features(void) {
         nx_missing = true;
 
     if (fxsr_missing || nx_missing)
-        panic("Missing CPU features: (fxsr: %i) (nx: %i)", fxsr_missing, nx_missing);
+        panic("init: Missing CPU features: (fxsr: %i) (nx: %i)", fxsr_missing, nx_missing);
 }
 
 _Noreturn void kernel_main(void);
@@ -64,7 +64,7 @@ _Noreturn void kernel_main(void) {
         printk_set_hook(driver_video_printk);
     err = tracing_init();
     if (err)
-        printk(PL_WARN "tracing_init() failed with code %i!\n", err);
+        printk(PL_WARN "init: tracing_init() failed with code %i!\n", err);
 
     check_cpu_features();
     memory_zones_init();
@@ -77,9 +77,9 @@ _Noreturn void kernel_main(void) {
 
     err = cmdline_parse();
     if (err)
-        printk(PL_WARN "cmdline_parse() failed with code %i!\n", err);
+        printk(PL_WARN "init: cmdline_parse() failed with code %i!\n", err);
 
-    printk(PL_CRIT "Successfully finished execution!\n");
+    printk(PL_CRIT "init: Successfully finished execution!\n");
     while (1)
         __asm__ volatile("hlt");
 }
