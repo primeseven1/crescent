@@ -528,9 +528,30 @@ static void normal_zone_init(uintptr_t base, size_t total_mem) {
     memory_zone_init(normal_zone, (void*)base, zone_size_rounded, total_mem, GFP_PM_ZONE_NORMAL, layers);
 }
 
+static void print_limine_mmap(void) {
+    struct limine_mmap_response* mmap = g_limine_mmap_request.response;
+
+    const char* types[] = { 
+        "usable",  "reserved", "acpi reclaimable", "acpi nvs", 
+        "bad memory", "usable", "usable", "reserved" 
+    };
+
+    printk("mm: Limine memory map:\n");
+    for (u64 i = 0; i < mmap->entry_count; i++) {
+        u8* base = mmap->entries[i]->base;
+        const char* s = "reserved";
+        if (likely(mmap->entries[i]->type < ARRAY_SIZE(types)))
+            s = types[mmap->entries[i]->type];
+
+        printk(" %p - %p: %s\n", base, base + mmap->entries[i]->len - 1, s);
+    }
+}
+
 void memory_zones_init(void) {
     if (unlikely(!g_limine_mmap_request.response))
         panic("Limine memory map response not available!");
+
+    print_limine_mmap();
 
     /* Getting the very last usable memory address tells the kernel how much memory is available */
     size_t total_mem = (uintptr_t)get_last_usable();
