@@ -40,22 +40,6 @@ static void bsp_cpu_init(void) {
     _cpu_set(&bsp_cpu);
 }
 
-static void check_cpu_features(void) {
-    bool fxsr_missing = false;
-    bool nx_missing = false;
-
-    u32 eax, ebx, ecx, edx;
-    cpuid(CPUID_LEAF_FEATURE_BITS, 0, &eax, &ebx, &ecx, &edx);
-    if (!(edx & (1 << 24)))
-        fxsr_missing = true;
-    cpuid(CPUID_EXT_LEAF_FEATURE_BITS, 0, &eax, &ebx, &ecx, &edx);
-    if (!(edx & (1 << 20)))
-        nx_missing = true;
-
-    if (fxsr_missing || nx_missing)
-        panic("init: Missing CPU features: (fxsr: %i) (nx: %i)", fxsr_missing, nx_missing);
-}
-
 _Noreturn void kernel_main(void);
 _Noreturn void kernel_main(void) {
     bsp_cpu_init();
@@ -66,7 +50,6 @@ _Noreturn void kernel_main(void) {
     if (err)
         printk(PL_WARN "init: tracing_init() failed with code %i!\n", err);
 
-    check_cpu_features();
     memory_zones_init();
     mmap_init();
     vm_zones_init();
