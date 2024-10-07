@@ -28,7 +28,7 @@ static void bsp_cpu_init(void) {
     struct limine_smp_response* smp_response = g_limine_smp_request.response;
     if (smp_response) {
         for (u64 i = 0; i < smp_response->cpu_count; i++) {
-            if (smp_response->cpus[i]->lapic_id != smp_response->bsp_lapic_id) {
+            if (smp_response->cpus[i]->lapic_id == smp_response->bsp_lapic_id) {
                 bsp_cpu.processor_id = smp_response->cpus[i]->processor_id;
                 break;
             }
