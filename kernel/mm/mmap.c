@@ -518,6 +518,9 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
      * If the KMMAP_ALLOC flag is set, then that means the user does not care
      * about what physical address the virtual address maps to, so allocate physical
      * pages when allocating memory.
+     *
+     * If no flags are set, then just return an error code, since it's unknown how
+     * the physical memory allocation should be done
      */
     if (flags & KMMAP_PHYS) {
         if (private < (void*)0x1000 || (gfp_flags & GFP_VM_LARGE_PAGE && private < (void*)0x200000)) {
@@ -563,6 +566,8 @@ void* kmmap(void* virtual, size_t size, unsigned int flags,
             free_pages(physical, page_size_order);
             vm_unmap_pages(vm_ctx, virtual, 1);
         }
+    } else {
+        *errno = -EINVAL;
     }
 
     free_vpages(saved_virtual, vorder);
@@ -622,6 +627,9 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
      * If KMMAP_ALLOC is set, then free the physical pages. However these physical
      * pages are probably non-contiguous, so get the physical address of each page
      * and free them induvidually.
+     *
+     * If no flags are set, then just return an error code since we know nothing
+     * about the allocation
      */
     if (flags & KMMAP_PHYS) {
         int err = vm_unmap_pages(vm_ctx, virtual, page_count);
@@ -643,6 +651,8 @@ int kmunmap(void* virtual, size_t size, unsigned int flags) {
             virtual = (u8*)virtual + page_size;
             page_count--;
         }
+    } else {
+        return -EINVAL;
     }
 
     free_vpages(virtual, order);
